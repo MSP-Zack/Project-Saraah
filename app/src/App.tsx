@@ -16,6 +16,8 @@ import ThinkingDisplay from '@/components/ThinkingDisplay';
 import StatusBar from '@/components/StatusBar';
 import NotesPanel from '@/components/NotesPanel';
 import EbooksPanel from '@/components/EbooksPanel';
+import ToolsPanel from '@/components/ToolsPanel';
+import VRMActionsPanel from '@/components/VRMActionsPanel';
 import { Button } from '@/components/ui/button';
 import { 
   MessageSquare, Settings, Shield, Brain, Smile, Swords, Heart, 
@@ -35,6 +37,8 @@ const tabs: Tab[] = [
   { id: 'permissions', label: 'Permissions', icon: <Shield className="w-4 h-4" />, component: PermissionPanel },
   { id: 'memory', label: 'Memory', icon: <Brain className="w-4 h-4" />, component: MemoryPanel },
   { id: 'notes', label: 'Notes', icon: <FileText className="w-4 h-4" />, component: NotesPanel },
+  { id: 'tools', label: 'Tools', icon: <Sparkles className="w-4 h-4" />, component: ToolsPanel },
+  { id: 'vrm_actions', label: 'VRM', icon: <Smile className="w-4 h-4" />, component: VRMActionsPanel },
   { id: 'ebooks', label: 'E‑Books', icon: <BookOpen className="w-4 h-4" />, component: EbooksPanel },
   { id: 'images', label: 'Images', icon: <ImageIcon className="w-4 h-4" />, component: ImagePanel },
   { id: 'outfit', label: 'Outfit', icon: <Sparkles className="w-4 h-4" />, component: OutfitPanel },

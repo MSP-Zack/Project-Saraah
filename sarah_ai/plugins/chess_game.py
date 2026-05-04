@@ -16,6 +16,8 @@ class ChessGame:
         self.game_history = []
         self.save_file = "memory/chess_games.json"
         os.makedirs("memory", exist_ok=True)
+        # AI skill level (approximate Elo). Higher means stronger and deeper search.
+        self.ai_level = 1400
     
     def reset_game(self):
         """Initialize a new chess board."""
@@ -61,8 +63,15 @@ class ChessGame:
             "game_over": self.game_over,
             "winner": self.winner,
             "is_draw": self.draw,
-            "valid_moves": self.get_all_valid_moves() if self.current_player == 'white' else []
+            "valid_moves": self.get_all_valid_moves() if self.current_player == 'white' else [],
+            "ai_level": self.ai_level
         }
+
+    def set_ai_level(self, elo: int):
+        try:
+            self.ai_level = int(elo)
+        except Exception:
+            pass
     
     def _is_valid_pos(self, row: int, col: int) -> bool:
         return 0 <= row < 8 and 0 <= col < 8
@@ -260,6 +269,12 @@ class ChessGame:
         
         if not move_found:
             return {"success": False, "error": "Invalid move"}
+        # Evaluate before making the move
+        try:
+            eval_before = self._evaluate_board()
+        except Exception:
+            eval_before = 0
+
         # Execute move with en-passant and castling handling
         color = self._get_piece_color(piece)
 
@@ -366,12 +381,19 @@ class ChessGame:
                 self.game_over = True
                 self.draw = True
 
+        # Evaluate after
+        try:
+            eval_after = self._evaluate_board()
+        except Exception:
+            eval_after = 0
+
         return {
             "success": True,
             "move": move_notation,
             "captured": captured if captured != '.' else None,
             "game_over": self.game_over,
-            "board": self.get_board_state()
+            "board": self.get_board_state(),
+            "evaluation": {"before": eval_before, "after": eval_after, "delta": eval_after - eval_before}
         }
     
     def ai_move(self) -> Dict:
@@ -383,23 +405,42 @@ class ChessGame:
         if not moves:
             return {"success": False, "error": "No valid moves"}
         
-        # Simple evaluation with minimax depth 2
+        # Choose search depth based on ai_level (elo)
+        elo = max(400, min(3500, self.ai_level or 1400))
+        if elo < 1000:
+            depth = 1
+        elif elo < 1400:
+            depth = 2
+        elif elo < 1800:
+            depth = 3
+        elif elo < 2200:
+            depth = 4
+        else:
+            depth = 5
+
+        # Adjust randomness: lower elo -> more randomness
+        noise_prob = max(0.0, min(0.6, (1600 - elo) / 1000.0))
+
         best_move = None
-        best_score = -99999
-        
+        best_score = -999999
+
         for move in moves:
             # Make move
             piece = self.board[move["from"]["row"]][move["from"]["col"]]
             captured = self.board[move["to"]["row"]][move["to"]["col"]]
             self.board[move["to"]["row"]][move["to"]["col"]] = piece
             self.board[move["from"]["row"]][move["from"]["col"]] = '.'
-            
-            score = -self._minimax(1, -99999, 99999, False)
-            
+
+            score = -self._minimax(depth - 1, -999999, 999999, False)
+
             # Undo
             self.board[move["from"]["row"]][move["from"]["col"]] = piece
             self.board[move["to"]["row"]][move["to"]["col"]] = captured
-            
+
+            # Occasionally explore suboptimal moves for lower elo
+            if noise_prob > 0 and random.random() < noise_prob:
+                score = score - random.randint(0, 200)
+
             if score > best_score:
                 best_score = score
                 best_move = move

@@ -83,6 +83,13 @@ runtime_state = {
     "last_activity": datetime.now().isoformat(),
     "screen_capture_count": 0
 }
+# Manual VRM control state (user can toggle whether manual VRM actions are hidden from the LLM)
+runtime_state.setdefault('vrm_manual_hidden', True)
+runtime_state.setdefault('manual_vrm_actions', [])
+runtime_state.setdefault('last_manual_action_time', None)
+
+# Task handle for delayed manual VRM notifications
+manual_vrm_notify_task = None
 
 # ========== INIT ==========
 def initialize():
@@ -540,6 +547,17 @@ def get_vrm_actions():
     return {}
 
 
+@app.get('/api/tools')
+def get_tools():
+    """Return available tools and loaded plugins for the frontend/LLM."""
+    tools = {
+        "plugins": plugin_manager.list_plugins() if plugin_manager else [],
+        "vrm_actions_available": bool(vrm_actions),
+        "description": "List of plugins and capabilities available to the assistant"
+    }
+    return tools
+
+
 # ========== EBOOKS / READER ==========
 
 
@@ -915,6 +933,84 @@ async def handle_websocket_message(ws: WebSocket, data: dict):
     
     elif msg_type == "vrm_body_click":
         await handle_vrm_body_click(ws, data)
+
+    elif msg_type == "vrm_manual_action":
+        # Manual VRM action initiated by the user via UI controls
+        action_name = data.get("action", "")
+        params = data.get("params", {}) or {}
+        now_iso = datetime.now().isoformat()
+
+        # Record manual action
+        runtime_state.setdefault('manual_vrm_actions', []).append({
+            'action': action_name,
+            'params': params,
+            'time': now_iso
+        })
+        runtime_state['last_manual_action_time'] = now_iso
+
+        # Immediately broadcast to clients to trigger the animation locally
+        expr = None
+        anim = None
+        if vrm_actions:
+            a = vrm_actions.get_animation(action_name)
+            if a:
+                anim = action_name
+            e = vrm_actions.get_expression(action_name)
+            if e:
+                expr = action_name
+            body = vrm_actions.get_body_interaction(action_name)
+            if body:
+                expr = body.get('expression') or expr
+
+        await broadcast_message({
+            "action": "vrm_reaction",
+            "part": params.get('part'),
+            "expression": expr,
+            "animation": anim or action_name,
+            "llm_notify": False,
+            "timestamp": now_iso
+        })
+
+        # If manual actions are not hidden from the LLM, schedule a delayed notify
+        if not runtime_state.get('vrm_manual_hidden', True) and sarah_brain:
+            # Cancel existing pending notifier
+            global manual_vrm_notify_task
+            try:
+                if manual_vrm_notify_task and not manual_vrm_notify_task.done():
+                    manual_vrm_notify_task.cancel()
+            except Exception:
+                pass
+
+            async def _delayed_notify():
+                try:
+                    await asyncio.sleep(60)
+                    last = runtime_state.get('last_manual_action_time')
+                    if not last:
+                        return
+                    last_dt = datetime.fromisoformat(last)
+                    if (datetime.now() - last_dt).total_seconds() < 60:
+                        return
+
+                    # Build a summary for the LLM
+                    entries = runtime_state.get('manual_vrm_actions', [])[-8:]
+                    summary_lines = [f"- {e['action']} (params={e.get('params')}) at {e['time']}" for e in entries]
+                    summary = "User manually controlled the avatar with the following actions:\n" + "\n".join(summary_lines)
+
+                    sys_msg = f"[SYSTEM: The user manually controlled my avatar (these are recent actions):\n{summary}\nPlease react naturally based on your persona and current context.]"
+                    result = await sarah_brain.generate_response(sys_msg)
+
+                    await broadcast_message({
+                        "action": "reply",
+                        "text": result.get('text', ''),
+                        "actions": result.get('actions', []),
+                        "timestamp": datetime.now().isoformat()
+                    })
+                except asyncio.CancelledError:
+                    return
+                except Exception as e:
+                    print(f"[VRM MANUAL NOTIFY]: Error: {e}")
+
+            manual_vrm_notify_task = asyncio.create_task(_delayed_notify())
     
     elif msg_type == "thinking_mode":
         runtime_state["thinking_mode"] = data.get("enabled", False)
@@ -945,6 +1041,9 @@ async def handle_websocket_message(ws: WebSocket, data: dict):
             runtime_state["rp_mode"] = cfg["rp_mode"]
             if sarah_brain:
                 sarah_brain.rp_mode = cfg["rp_mode"]
+
+        if "vrm_manual_hidden" in cfg:
+            runtime_state["vrm_manual_hidden"] = bool(cfg["vrm_manual_hidden"])
     
     elif msg_type == "tool_execute":
         await handle_tool_execute(ws, data)
@@ -1218,6 +1317,49 @@ async def handle_chess_move(ws: WebSocket, data: dict):
                 data.get("to_row"), data.get("to_col")
             )
             await ws.send_json({"action": "chess_update", "result": result})
+            # Ask the LLM to comment on the move and optionally trigger VRM actions / emotions
+            try:
+                pm = result.get('player_move') or result
+                eval_info = None
+                if isinstance(pm, dict):
+                    eval_info = pm.get('evaluation') or (pm.get('player_move') or {}).get('evaluation')
+
+                move_notation = None
+                if isinstance(pm, dict):
+                    move_notation = pm.get('move')
+
+                if sarah_brain and (move_notation or eval_info):
+                    before = eval_info.get('before') if eval_info else None
+                    after = eval_info.get('after') if eval_info else None
+                    delta = eval_info.get('delta') if eval_info else None
+                    prompt = "[SYSTEM: Chess update] The user made a move."
+                    if move_notation:
+                        prompt += f" Move: {move_notation}."
+                    if before is not None and after is not None:
+                        prompt += f" Evaluation before: {before}, after: {after}, delta: {delta}."
+                    prompt += " Please comment on this move briefly (praise, critique, or suggest improvement), and optionally include VRM actions or expressions in your response."
+
+                    result_resp = await sarah_brain.generate_response(prompt)
+                    response_text = result_resp.get('text', '')
+
+                    # Generate TTS for the commentary if possible
+                    audio_path = None
+                    try:
+                        if tts_engine and response_text:
+                            # Use emotion hint if LLM provided one via actions
+                            audio_path = await tts_engine.speak_to_file(response_text)
+                    except Exception as e:
+                        print(f"[CHESS TTS ERROR]: {e}")
+
+                    await broadcast_message({
+                        "action": "reply",
+                        "text": response_text,
+                        "actions": result_resp.get('actions', []),
+                        "audio_url": "/static/response.mp3" if audio_path else None,
+                        "timestamp": datetime.now().isoformat()
+                    })
+            except Exception as e:
+                print(f"[CHESS COMMENT]: Error generating commentary: {e}")
 
 async def handle_editor_action(ws: WebSocket, data: dict):
     """Handle collaborative editor actions."""
