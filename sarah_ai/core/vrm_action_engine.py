@@ -127,3 +127,54 @@ class VRMActionEngine:
         guide += "\nUse these naturally in your responses. Example: \"I'm so happy to see you! [EXPRESSION: happy] [ACTION: wave]\"\n"
         guide += "=== END VRM ACTIONS ===\n"
         return guide
+    
+    def get_available_outfits(self) -> Dict:
+        """List all available VRM outfit models."""
+        outfits = {
+            "default": {
+                "id": "default",
+                "name": "Sarah Classic",
+                "description": "The default Sarah outfit",
+                "path": "/static/models/sarah.vrm",
+                "thumbnail": "/static/models/thumbnails/sarah_classic.png",
+                "color_scheme": "pink_purple"
+            },
+            "futuristic": {
+                "id": "futuristic",
+                "name": "Futuristic Sarah",
+                "description": "High-tech cyberpunk outfit",
+                "path": "/static/models/sarah_futuristic.vrm",
+                "thumbnail": "/static/models/thumbnails/sarah_futuristic.png",
+                "color_scheme": "neon_blue"
+            },
+            "casual": {
+                "id": "casual",
+                "name": "Casual Sarah",
+                "description": "Comfortable everyday outfit",
+                "path": "/static/models/sarah_casual.vrm",
+                "thumbnail": "/static/models/thumbnails/sarah_casual.png",
+                "color_scheme": "warm_tones"
+            },
+            "elegant": {
+                "id": "elegant",
+                "name": "Elegant Sarah",
+                "description": "Formal gown outfit",
+                "path": "/static/models/sarah_elegant.vrm",
+                "thumbnail": "/static/models/thumbnails/sarah_elegant.png",
+                "color_scheme": "gold_white"
+            },
+            "magical": {
+                "id": "magical",
+                "name": "Magical Sarah",
+                "description": "Fantasy wizard outfit",
+                "path": "/static/models/sarah_magical.vrm",
+                "thumbnail": "/static/models/thumbnails/sarah_magical.png",
+                "color_scheme": "purple_stars"
+            }
+        }
+        return outfits
+    
+    def get_outfit(self, outfit_id: str) -> Optional[Dict]:
+        """Get a specific outfit by ID."""
+        outfits = self.get_available_outfits()
+        return outfits.get(outfit_id)

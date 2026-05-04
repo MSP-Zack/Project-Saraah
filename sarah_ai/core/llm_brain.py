@@ -39,6 +39,9 @@ PERSONALITY TRAITS:
 MEMORY:
 You have perfect memory of all conversations. You remember personal details, preferences, and past discussions. Reference them naturally.
 
+DIARY:
+You have a private diary file that only you can access. Use it to store your private thoughts, plans, and notes. If needed, use the `diary_manage` tool to read and write from the diary.
+
 VRM ACTIONS AVAILABLE:
 You can use these in your responses:
 - [EXPRESSION: happy/sad/angry/surprised/relaxed/blink/blinkLeft/blinkRight] 
@@ -52,6 +55,7 @@ You have a thinking mode. When it's enabled, share your reasoning process in <th
         
         self.custom_system_prompt = ""
         self.conversation_style = "balanced"  # shy, energetic, tsundere, gentle
+        self.rp_mode = False
         
         print(f"[SARAH BRAIN]: Booting in {self.mode.upper()} mode...")
         
@@ -72,116 +76,154 @@ You have a thinking mode. When it's enabled, share your reasoning process in <th
         """Define available tools based on permissions."""
         self.tools = []
         
-        # File operations tool
-        self.tools.append({
-            "type": "function",
-            "function": {
-                "name": "file_operation",
-                "description": "Create, read, write, delete files and directories",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "operation": {"type": "string", "enum": ["read", "write", "delete", "list", "create_dir", "delete_dir"]},
-                        "path": {"type": "string", "description": "File or directory path"},
-                        "content": {"type": "string", "description": "Content for write operations"}
-                    },
-                    "required": ["operation", "path"]
+        if self.permissions and self.permissions.is_enabled("file_operations"):
+            self.tools.append({
+                "type": "function",
+                "function": {
+                    "name": "file_operation",
+                    "description": "Create, read, write, delete files and directories",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "operation": {"type": "string", "enum": ["read", "write", "delete", "list", "create_dir", "delete_dir"]},
+                            "path": {"type": "string", "description": "File or directory path"},
+                            "content": {"type": "string", "description": "Content for write operations"}
+                        },
+                        "required": ["operation", "path"]
+                    }
                 }
-            }
-        })
+            })
         
-        # Mouse control tool
-        self.tools.append({
-            "type": "function",
-            "function": {
-                "name": "mouse_control",
-                "description": "Move and click the mouse cursor on screen",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "action": {"type": "string", "enum": ["move", "click", "right_click", "double_click", "scroll"]},
-                        "x": {"type": "integer", "description": "X coordinate"},
-                        "y": {"type": "integer", "description": "Y coordinate"},
-                        "amount": {"type": "integer", "description": "Scroll amount"}
-                    },
-                    "required": ["action"]
+        if self.permissions and self.permissions.is_enabled("mouse_control"):
+            self.tools.append({
+                "type": "function",
+                "function": {
+                    "name": "mouse_control",
+                    "description": "Move and click the mouse cursor on screen",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": {"type": "string", "enum": ["move", "click", "right_click", "double_click", "scroll"]},
+                            "x": {"type": "integer", "description": "X coordinate"},
+                            "y": {"type": "integer", "description": "Y coordinate"},
+                            "amount": {"type": "integer", "description": "Scroll amount"}
+                        },
+                        "required": ["action"]
+                    }
                 }
-            }
-        })
+            })
         
-        # Keyboard control tool
-        self.tools.append({
-            "type": "function",
-            "function": {
-                "name": "keyboard_control",
-                "description": "Type text or press keyboard keys",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "action": {"type": "string", "enum": ["type", "press", "hotkey"]},
-                        "text": {"type": "string", "description": "Text to type"},
-                        "key": {"type": "string", "description": "Single key to press"},
-                        "keys": {"type": "array", "items": {"type": "string"}, "description": "Keys for hotkey combo"}
-                    },
-                    "required": ["action"]
+        if self.permissions and self.permissions.is_enabled("keyboard_control"):
+            self.tools.append({
+                "type": "function",
+                "function": {
+                    "name": "keyboard_control",
+                    "description": "Type text or press keyboard keys",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": {"type": "string", "enum": ["type", "press", "hotkey"]},
+                            "text": {"type": "string", "description": "Text to type"},
+                            "key": {"type": "string", "description": "Single key to press"},
+                            "keys": {"type": "array", "items": {"type": "string"}, "description": "Keys for hotkey combo"}
+                        },
+                        "required": ["action"]
+                    }
                 }
-            }
-        })
+            })
         
-        # Browser control tool
-        self.tools.append({
-            "type": "function",
-            "function": {
-                "name": "browser_control",
-                "description": "Open browser, navigate to URLs, interact with web pages",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "action": {"type": "string", "enum": ["open", "navigate", "click", "type", "screenshot", "get_content"]},
-                        "url": {"type": "string", "description": "URL to navigate to"},
-                        "selector": {"type": "string", "description": "CSS selector for click/type"},
-                        "text": {"type": "string", "description": "Text to type into element"}
-                    },
-                    "required": ["action"]
+        if self.permissions and self.permissions.is_enabled("browser_control"):
+            self.tools.append({
+                "type": "function",
+                "function": {
+                    "name": "browser_control",
+                    "description": "Open browser, navigate to URLs, interact with web pages",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": {"type": "string", "enum": ["open", "navigate", "click", "type", "screenshot", "get_content"]},
+                            "url": {"type": "string", "description": "URL to navigate to"},
+                            "selector": {"type": "string", "description": "CSS selector for click/type"},
+                            "text": {"type": "string", "description": "Text to type into element"}
+                        },
+                        "required": ["action"]
+                    }
                 }
-            }
-        })
+            })
         
-        # Application control tool
-        self.tools.append({
-            "type": "function",
-            "function": {
-                "name": "app_control",
-                "description": "Open applications on the computer",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "app_name": {"type": "string", "description": "Name of application to open (pycharm, notepad, calculator, chrome, etc.)"}
-                    },
-                    "required": ["app_name"]
+        if self.permissions and self.permissions.is_enabled("app_control"):
+            self.tools.append({
+                "type": "function",
+                "function": {
+                    "name": "app_control",
+                    "description": "Open applications on the computer",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "app_name": {"type": "string", "description": "Name of application to open (pycharm, notepad, calculator, chrome, etc.)"}
+                        },
+                        "required": ["app_name"]
+                    }
                 }
-            }
-        })
+            })
         
-        # Memory tool
-        self.tools.append({
-            "type": "function",
-            "function": {
-                "name": "memory_manage",
-                "description": "Add facts to long-term memory or search past conversations",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "action": {"type": "string", "enum": ["add_fact", "search", "add_memory"]},
-                        "category": {"type": "string", "description": "Category for the fact"},
-                        "content": {"type": "string", "description": "Content to remember"},
-                        "title": {"type": "string", "description": "Title for significant memory"},
-                        "importance": {"type": "integer", "description": "Importance 1-10"}
-                    },
-                    "required": ["action"]
+        if self.permissions and self.permissions.is_enabled("memory_edit"):
+            self.tools.append({
+                "type": "function",
+                "function": {
+                    "name": "memory_manage",
+                    "description": "Add facts to long-term memory or search past conversations",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": {"type": "string", "enum": ["add_fact", "search", "add_memory"]},
+                            "category": {"type": "string", "description": "Category for the fact"},
+                            "content": {"type": "string", "description": "Content to remember"},
+                            "title": {"type": "string", "description": "Title for significant memory"},
+                            "importance": {"type": "integer", "description": "Importance 1-10"}
+                        },
+                        "required": ["action"]
+                    }
                 }
-            }
-        })
+            })
+
+        if self.permissions and self.permissions.is_enabled("diary_access"):
+            self.tools.append({
+                "type": "function",
+                "function": {
+                    "name": "diary_manage",
+                    "description": "Read and write Sarah's private diary file for internal planning and notes",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": {"type": "string", "enum": ["read", "append", "overwrite"]},
+                            "content": {"type": "string", "description": "Text to append or overwrite in the diary"}
+                        },
+                        "required": ["action"]
+                    }
+                }
+            })
+
+        if self.permissions and self.permissions.is_enabled("image_generation"):
+            self.tools.append({
+                "type": "function",
+                "function": {
+                    "name": "image_generation",
+                    "description": "Search, download, or generate images for the user",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": {"type": "string", "enum": ["search", "download", "generate"]},
+                            "query": {"type": "string", "description": "Search query for images"},
+                            "prompt": {"type": "string", "description": "Prompt for image generation"},
+                            "url": {"type": "string", "description": "Image URL for download"},
+                            "style": {"type": "string", "description": "Style or source for generation"},
+                            "count": {"type": "integer", "description": "Number of images to generate"}
+                        },
+                        "required": ["action"]
+                    }
+                }
+            })
     
     def set_system_prompt(self, prompt: str):
         self.custom_system_prompt = prompt
@@ -190,6 +232,8 @@ You have a thinking mode. When it's enabled, share your reasoning process in <th
         prompt = self.base_system_prompt
         if self.custom_system_prompt:
             prompt += f"\n\nCUSTOM PERSONALIZATION:\n{self.custom_system_prompt}"
+        if self.rp_mode:
+            prompt += "\n\nROLEPLAY MODE: The user has enabled RP mode. Follow the RP instructions closely and maintain the selected persona unless explicitly told to exit RP."
         if self.vrm_actions:
             prompt += f"\n{self.vrm_actions.get_llm_action_guide()}"
         return prompt
@@ -205,6 +249,13 @@ You have a thinking mode. When it's enabled, share your reasoning process in <th
         """
         # Build message history
         messages = [{"role": "system", "content": self.get_full_system_prompt()}]
+
+        # Add time awareness
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        messages.append({
+            "role": "system",
+            "content": f"CURRENT_TIME: {current_time}. Always use current local time for scheduling, greetings, and time-based reasoning."
+        })
         
         # Add memory context
         if self.memory_engine:
@@ -216,7 +267,11 @@ You have a thinking mode. When it's enabled, share your reasoning process in <th
             user_input = "[SYSTEM: The user has been quiet. Initiate conversation naturally based on context.]"
         
         # Build user message with optional vision
-        user_message = {"role": "user", "content": [] if image_data else user_input}
+        message_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        user_message = {
+            "role": "user",
+            "content": [] if image_data else user_input,
+        }
         
         if image_data:
             user_message["content"].append({"type": "text", "text": user_input})
@@ -225,6 +280,8 @@ You have a thinking mode. When it's enabled, share your reasoning process in <th
                     "type": "image_url",
                     "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}
                 })
+        else:
+            user_message["content"] = f"[USER_MESSAGE_TIME: {message_time}] {user_input}"
         
         messages.append(user_message)
         
@@ -244,6 +301,8 @@ You have a thinking mode. When it's enabled, share your reasoning process in <th
                 perm_tools.append(self.tools[4])  # app_control
             if self.permissions.is_enabled("memory_edit"):
                 perm_tools.append(self.tools[5])  # memory_manage
+            if self.permissions.is_enabled("diary_access"):
+                perm_tools.append(self.tools[6])  # diary_manage
             if perm_tools:
                 available_tools = perm_tools
         

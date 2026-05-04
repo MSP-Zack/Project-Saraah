@@ -12,5 +12,6 @@ mss>=9.0.0
 pyautogui>=0.9.54
 pyperclip>=1.8.2
 playwright>=1.40.0
+requests>=2.31.0
 pydantic>=2.5.0
 chess>=1.10.0

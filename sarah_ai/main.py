@@ -48,7 +48,7 @@ app.add_middleware(
 @app.get("/")
 def root():
     """Serve the React app."""
-    return FileResponse("static/index.html")
+    return FileResponse(Path(__file__).parent / "static" / "index.html")
 
 # ========== GLOBALS ==========
 sarah_brain: Optional[LLMBrain] = None
@@ -71,7 +71,9 @@ runtime_state = {
     "webcam_vision_enabled": False,
     "thinking_mode": False,
     "proactive_mode": True,
+    "rp_mode": False,
     "current_voice_profile": "default",
+    "current_outfit": "default",
     "sarah_status": "idle",
     "last_activity": datetime.now().isoformat(),
     "screen_capture_count": 0
@@ -148,6 +150,7 @@ def initialize():
     plugin_manager.load_plugin("chess_game")
     plugin_manager.load_plugin("tamagotchi_pet")
     plugin_manager.load_plugin("collab_editor")
+    plugin_manager.load_plugin("image_generation")
     print(f"[INIT]: Plugins loaded - {plugin_manager.list_plugins()}")
     
     print("=" * 60)
@@ -171,23 +174,26 @@ class MemoryEdit(BaseModel):
     content: Optional[str] = None
     importance: Optional[int] = None
 
+class DiaryUpdate(BaseModel):
+    action: str
+    content: Optional[str] = None
+
 class ConfigUpdate(BaseModel):
     system_prompt: Optional[str] = None
     voice_profile: Optional[str] = None
     thinking_mode: Optional[bool] = None
     proactive_mode: Optional[bool] = None
+    rp_mode: Optional[bool] = None
 
-# ========== HTTP ENDPOINTS ==========
+class ImageDownloadRequest(BaseModel):
+    url: str
+    filename: Optional[str] = None
 
-@app.get("/api/status")
-def get_status():
-    """Get current system status."""
-    return {
-        "status": "online",
-        "sarah_status": runtime_state["sarah_status"],
-        "thinking_mode": runtime_state["thinking_mode"],
-        "proactive_mode": runtime_state["proactive_mode"],
-        "permissions": permission_manager.get_all() if permission_manager else {},
+class ImageGenerateRequest(BaseModel):
+    prompt: str
+    style: Optional[str] = "creative"
+    count: Optional[int] = 1
+
         "action_status": action_engine.get_status() if action_engine else {},
         "memory_stats": memory_engine.get_stats() if memory_engine else {},
         "voice_profiles": tts_engine.profiles if tts_engine else {},
@@ -204,6 +210,8 @@ def update_permission(update: PermissionUpdate):
     """Update a permission."""
     if permission_manager:
         permission_manager.set_permission(update.key, update.enabled)
+        if sarah_brain:
+            sarah_brain._setup_tools()
         return {"success": True, "permissions": permission_manager.get_all()}
     return {"success": False, "error": "Permission manager not initialized"}
 
@@ -249,6 +257,28 @@ def search_memory(query: str):
         return {"results": memory_engine.search_memories(query)}
     return {"success": False, "error": "Memory engine not initialized"}
 
+@app.get("/api/diary")
+def get_diary():
+    diary_path = Path(__file__).parent / "private_diary.txt"
+    if diary_path.exists():
+        return {"content": diary_path.read_text(encoding="utf-8")}
+    return {"content": ""}
+
+@app.post("/api/diary")
+def update_diary(update: DiaryUpdate):
+    diary_path = Path(__file__).parent / "private_diary.txt"
+    diary_path.parent.mkdir(parents=True, exist_ok=True)
+    if update.action == "append":
+        with diary_path.open("a", encoding="utf-8") as f:
+            f.write((update.content or "") + "\n")
+        return {"success": True}
+    if update.action == "overwrite":
+        diary_path.write_text(update.content or "", encoding="utf-8")
+        return {"success": True}
+    if update.action == "read":
+        return {"content": diary_path.read_text(encoding="utf-8") if diary_path.exists() else ""}
+    return {"success": False, "error": "Unknown diary action"}
+
 @app.post("/api/config")
 def update_config(config: ConfigUpdate):
     """Update Sarah's configuration."""
@@ -268,6 +298,11 @@ def update_config(config: ConfigUpdate):
     
     if config.proactive_mode is not None:
         runtime_state["proactive_mode"] = config.proactive_mode
+
+    if hasattr(config, 'rp_mode') and config.rp_mode is not None:
+        runtime_state["rp_mode"] = config.rp_mode
+        if sarah_brain:
+            sarah_brain.rp_mode = config.rp_mode
     
     return {"success": True, "config": runtime_state}
 
@@ -277,6 +312,94 @@ def get_vrm_actions():
     if vrm_actions:
         return vrm_actions.get_all_actions()
     return {}
+
+# ========== OUTFIT MANAGEMENT ==========
+
+@app.get("/api/vrm/models")
+def get_available_models():
+    """Get list of available VRM models for outfit switching."""
+    if vrm_actions:
+        outfits = vrm_actions.get_available_outfits()
+        return {
+            "models": outfits,
+            "current": runtime_state.get("current_outfit", "default")
+        }
+    return {"models": {}, "current": "default"}
+
+@app.get("/api/vrm/outfit")
+def get_current_outfit():
+    """Get the currently selected outfit."""
+    return {
+        "outfit": runtime_state.get("current_outfit", "default"),
+        "outfit_data": vrm_actions.get_outfit(runtime_state.get("current_outfit", "default")) if vrm_actions else None
+    }
+
+@app.post("/api/vrm/outfit")
+def set_outfit(outfit_id: str):
+    """Switch to a different VRM outfit."""
+    if not vrm_actions:
+        return {"success": False, "error": "VRM actions not initialized"}
+    
+    outfit = vrm_actions.get_outfit(outfit_id)
+    if not outfit:
+        return {"success": False, "error": f"Outfit '{outfit_id}' not found"}
+    
+    # Update runtime state
+    runtime_state["current_outfit"] = outfit_id
+    
+    # Broadcast outfit change to all clients
+    asyncio.create_task(broadcast_message({
+        "action": "outfit_changed",
+        "outfit_id": outfit_id,
+        "outfit_data": outfit,
+        "timestamp": datetime.now().isoformat()
+    }))
+    
+    return {
+        "success": True,
+        "outfit": outfit_id,
+        "outfit_data": outfit
+    }
+
+@app.get("/api/images/search")
+async def image_search(query: str, source: str = "bing", limit: int = 12):
+    if plugin_manager:
+        plugin = plugin_manager.get_plugin("image_generation")
+        if plugin:
+            return await plugin.search(query, source, limit)
+    return {"success": False, "error": "Image generation plugin not loaded"}
+
+@app.post("/api/images/download")
+async def image_download(request: ImageDownloadRequest):
+    if plugin_manager:
+        plugin = plugin_manager.get_plugin("image_generation")
+        if plugin:
+            return await plugin.download(request.url, request.filename)
+    return {"success": False, "error": "Image generation plugin not loaded"}
+
+@app.post("/api/images/generate")
+async def image_generate(request: ImageGenerateRequest):
+    if plugin_manager:
+        plugin = plugin_manager.get_plugin("image_generation")
+        if plugin:
+            return await plugin.generate(request.prompt, request.style or "creative", request.count or 1)
+    return {"success": False, "error": "Image generation plugin not loaded"}
+
+@app.get("/api/images/history")
+async def image_history():
+    if plugin_manager:
+        plugin = plugin_manager.get_plugin("image_generation")
+        if plugin:
+            return {"history": plugin.get_history()}
+    return {"success": False, "error": "Image generation plugin not loaded"}
+
+@app.get("/api/images/list")
+async def image_list():
+    if plugin_manager:
+        plugin = plugin_manager.get_plugin("image_generation")
+        if plugin:
+            return {"images": plugin.list_images()}
+    return {"success": False, "error": "Image generation plugin not loaded"}
 
 @app.get("/api/screen/monitors")
 def get_monitors():
@@ -454,6 +577,24 @@ async def handle_websocket_message(ws: WebSocket, data: dict):
         if tts_engine:
             tts_engine.set_profile(data.get("profile", "default"))
     
+    elif msg_type == "config_update":
+        cfg = data.get("config", {})
+        if "system_prompt" in cfg and sarah_brain:
+            sarah_brain.set_system_prompt(cfg["system_prompt"])
+        if "voice_profile" in cfg and tts_engine:
+            tts_engine.set_profile(cfg["voice_profile"])
+            runtime_state["current_voice_profile"] = cfg["voice_profile"]
+        if "thinking_mode" in cfg:
+            runtime_state["thinking_mode"] = cfg["thinking_mode"]
+            if sarah_brain:
+                sarah_brain.thinking_mode = cfg["thinking_mode"]
+        if "proactive_mode" in cfg:
+            runtime_state["proactive_mode"] = cfg["proactive_mode"]
+        if "rp_mode" in cfg:
+            runtime_state["rp_mode"] = cfg["rp_mode"]
+            if sarah_brain:
+                sarah_brain.rp_mode = cfg["rp_mode"]
+    
     elif msg_type == "tool_execute":
         await handle_tool_execute(ws, data)
     
@@ -465,6 +606,8 @@ async def handle_websocket_message(ws: WebSocket, data: dict):
     
     elif msg_type == "editor_action":
         await handle_editor_action(ws, data)
+    elif msg_type == "image_action":
+        await handle_image_action(ws, data)
 
 async def handle_chat_message(ws: WebSocket, data: dict):
     """Process a text chat message."""
@@ -649,6 +792,47 @@ async def handle_tool_execute(ws: WebSocket, data: dict):
             else:
                 r = {"success": False, "error": "Unknown memory action"}
             result.update(r)
+
+        elif tool_name == "image_generation":
+            if plugin_manager:
+                plugin = plugin_manager.get_plugin("image_generation")
+                if plugin:
+                    action = params.get("action", "")
+                    if action == "search":
+                        r = await plugin.search(params.get("query", ""), params.get("source", "bing"), params.get("limit", 12))
+                    elif action == "download":
+                        r = await plugin.download(params.get("url", ""), params.get("filename"))
+                    elif action == "generate":
+                        r = await plugin.generate(params.get("prompt", ""), params.get("style", "creative"), params.get("count", 1))
+                    else:
+                        r = {"success": False, "error": "Unknown image action"}
+                else:
+                    r = {"success": False, "error": "Image generation plugin not loaded"}
+            else:
+                r = {"success": False, "error": "Plugin manager not initialized"}
+            result.update(r)
+
+        elif tool_name == "diary_manage":
+            diary_path = Path(__file__).parent / "private_diary.txt"
+            action = params.get("action", "")
+            try:
+                if action == "read":
+                    content = diary_path.read_text(encoding="utf-8") if diary_path.exists() else ""
+                    r = {"success": True, "content": content}
+                elif action == "append":
+                    diary_path.parent.mkdir(parents=True, exist_ok=True)
+                    with diary_path.open("a", encoding="utf-8") as f:
+                        f.write(params.get("content", "") + "\n")
+                    r = {"success": True}
+                elif action == "overwrite":
+                    diary_path.parent.mkdir(parents=True, exist_ok=True)
+                    diary_path.write_text(params.get("content", ""), encoding="utf-8")
+                    r = {"success": True}
+                else:
+                    r = {"success": False, "error": "Unknown diary action"}
+            except Exception as e:
+                r = {"success": False, "error": str(e)}
+            result.update(r)
     
     except Exception as e:
         result["error"] = str(e)
@@ -702,6 +886,22 @@ async def handle_editor_action(ws: WebSocket, data: dict):
                     result = method()
                 await ws.send_json({"action": "editor_update", "result": result})
 
+async def handle_image_action(ws: WebSocket, data: dict):
+    """Handle image generation and search actions."""
+    action = data.get("action", "")
+    if plugin_manager:
+        plugin = plugin_manager.get_plugin("image_generation")
+        if plugin:
+            if action == "search":
+                result = await plugin.search(data.get("query", ""), data.get("source", "bing"), data.get("limit", 12))
+            elif action == "download":
+                result = await plugin.download(data.get("url", ""), data.get("filename"))
+            elif action == "generate":
+                result = await plugin.generate(data.get("prompt", ""), data.get("style", "creative"), data.get("count", 1))
+            else:
+                result = {"success": False, "error": "Unknown image action"}
+            await ws.send_json({"action": "image_update", "result": result})
+
 # ========== PROACTIVE CHAT TASK ==========
 async def proactive_chat_loop():
     """Background task for proactive chatting."""
@@ -751,6 +951,9 @@ async def proactive_chat_loop():
 # ========== STATIC FILES ==========
 static_path = Path(__file__).parent / "static"
 if static_path.exists():
+    # Serve the built frontend and all static assets from the root.
+    app.mount("/", StaticFiles(directory=str(static_path), html=True), name="static_root")
+    # Keep /static mounted as a fallback for any asset URLs that may use that prefix.
     app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 
 # ========== MAIN ==========

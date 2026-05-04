@@ -14,6 +14,7 @@ interface StoreState extends AppState {
   setWebcamVisionEnabled: (enabled: boolean) => void;
   setThinkingMode: (enabled: boolean) => void;
   setProactiveMode: (enabled: boolean) => void;
+  setRpMode: (enabled: boolean) => void;
   setActiveTab: (tab: string) => void;
   setSystemPrompt: (prompt: string) => void;
   setVoiceProfile: (profile: string) => void;
@@ -25,6 +26,8 @@ interface StoreState extends AppState {
   setDocuments: (docs: { id: string; title: string; modified: string; preview: string }[]) => void;
   setActiveDocument: (doc: EditorDocument | null) => void;
   setEditorContent: (content: string) => void;
+  setCurrentOutfit: (outfit: string) => void;
+  setAvailableOutfits: (outfits: any[]) => void;
   clearMessages: () => void;
 }
 
@@ -41,6 +44,7 @@ export const useStore = create<StoreState>((set) => ({
   webcamVisionEnabled: false,
   thinkingMode: false,
   proactiveMode: true,
+  rpMode: false,
   activeTab: 'chat',
   systemPrompt: '',
   voiceProfile: 'default',
@@ -52,6 +56,12 @@ export const useStore = create<StoreState>((set) => ({
     isTalking: false,
     blinkState: false,
     lipSyncValue: 0,
+  },
+  outfitState: {
+    currentOutfit: 'default',
+    availableOutfits: [],
+    isTransitioning: false,
+    transitionProgress: 0,
   },
   currentThinking: '',
   chessBoard: null,
@@ -73,6 +83,7 @@ export const useStore = create<StoreState>((set) => ({
   setWebcamVisionEnabled: (enabled) => set({ webcamVisionEnabled: enabled }),
   setThinkingMode: (enabled) => set({ thinkingMode: enabled }),
   setProactiveMode: (enabled) => set({ proactiveMode: enabled }),
+  setRpMode: (enabled) => set({ rpMode: enabled }),
   setActiveTab: (tab) => set({ activeTab: tab }),
   setSystemPrompt: (prompt) => set({ systemPrompt: prompt }),
   setVoiceProfile: (profile) => set({ voiceProfile: profile }),
@@ -84,5 +95,11 @@ export const useStore = create<StoreState>((set) => ({
   setDocuments: (docs) => set({ documents: docs }),
   setActiveDocument: (doc) => set({ activeDocument: doc }),
   setEditorContent: (content) => set({ editorContent: content }),
+  setCurrentOutfit: (outfit) => set((state) => ({
+    outfitState: { ...state.outfitState, currentOutfit: outfit }
+  })),
+  setAvailableOutfits: (outfits) => set((state) => ({
+    outfitState: { ...state.outfitState, availableOutfits: outfits }
+  })),
   clearMessages: () => set({ messages: [] }),
 }));

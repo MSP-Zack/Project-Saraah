@@ -16,7 +16,7 @@ export default function SettingsPanel() {
   const sendConfig = (updates: any) => {
     const ws = getWebSocket();
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'config_update', ...updates }));
+      ws.send(JSON.stringify({ type: 'config_update', config: updates }));
     }
   };
 
@@ -103,6 +103,24 @@ export default function SettingsPanel() {
                 store.setProactiveMode(v);
                 const ws = getWebSocket();
                 if (ws) ws.send(JSON.stringify({ type: 'proactive_mode', enabled: v }));
+              }}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-cyan-400" />
+              <div>
+                <Label className="text-sm text-white">RP Mode</Label>
+                <p className="text-[10px] text-white/40">Enable roleplay rules and persona control</p>
+              </div>
+            </div>
+            <Switch
+              checked={store.rpMode}
+              onCheckedChange={(v) => {
+                store.setRpMode(v);
+                const ws = getWebSocket();
+                if (ws) ws.send(JSON.stringify({ type: 'config_update', config: { rp_mode: v } }));
               }}
             />
           </div>

@@ -102,6 +102,13 @@ export interface EditorSuggestion {
   accepted: boolean | null;
 }
 
+export interface OutfitState {
+  currentOutfit: string;
+  availableOutfits: any[];
+  isTransitioning: boolean;
+  transitionProgress: number;
+}
+
 export interface AppState {
   // Connection
   isConnected: boolean;
@@ -119,6 +126,7 @@ export interface AppState {
   webcamVisionEnabled: boolean;
   thinkingMode: boolean;
   proactiveMode: boolean;
+  rpMode: boolean;
   
   // Current tab
   activeTab: string;
@@ -132,6 +140,9 @@ export interface AppState {
   
   // VRM
   vrmState: VRMState;
+  
+  // Outfit
+  outfitState: OutfitState;
   
   // Thinking
   currentThinking: string;

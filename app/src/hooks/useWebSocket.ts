@@ -22,12 +22,14 @@ export function useWebSocket() {
 
     ws.onopen = () => {
       console.log('[WS]: Connected to Sarah');
+      (window as any).sarahWS = ws;
       store.setConnected(true);
       store.setSarahStatus('idle');
     };
 
     ws.onclose = () => {
       console.log('[WS]: Disconnected');
+      (window as any).sarahWS = null;
       store.setConnected(false);
       store.setSarahStatus('offline');
       // Auto reconnect
@@ -64,6 +66,11 @@ export function useWebSocket() {
       
       if (data.thinking) {
         store.setCurrentThinking(data.thinking);
+      }
+
+      // Trigger VRM speaking animation and lip-sync when Sarah replies.
+      if (data.text) {
+        window.dispatchEvent(new CustomEvent('vrm-lipsync', { detail: 1 }));
       }
 
       // Play audio if available

@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Shield, AlertTriangle, Mouse, Keyboard, FileText, Globe, AppWindow, Monitor, Camera, MessageSquare, User, Terminal } from 'lucide-react';
+import { Shield, AlertTriangle, Mouse, Keyboard, FileText, Globe, AppWindow, Monitor, Camera, MessageSquare, User, Terminal, Image as ImageIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -19,6 +19,7 @@ const iconMap: Record<string, React.ReactNode> = {
   chat: <MessageSquare className="w-4 h-4" />,
   user: <User className="w-4 h-4" />,
   terminal: <Terminal className="w-4 h-4" />,
+  image: <ImageIcon className="w-4 h-4" />,
 };
 
 const riskColors: Record<string, string> = {
@@ -67,7 +68,7 @@ export default function PermissionPanel() {
   const categories = [
     { name: 'Input Control', keys: ['mouse_control', 'keyboard_control'] },
     { name: 'System Access', keys: ['file_operations', 'app_control', 'system_shell'] },
-    { name: 'Network', keys: ['browser_control'] },
+    { name: 'Network', keys: ['browser_control', 'image_generation'] },
     { name: 'Vision', keys: ['screen_vision', 'webcam_vision'] },
     { name: 'Sarah Features', keys: ['proactive_chat', 'vrm_actions', 'memory_edit'] },
   ];

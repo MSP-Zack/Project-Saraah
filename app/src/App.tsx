@@ -6,6 +6,8 @@ import ChatPanel from '@/components/ChatPanel';
 import SettingsPanel from '@/components/SettingsPanel';
 import PermissionPanel from '@/components/PermissionPanel';
 import MemoryPanel from '@/components/MemoryPanel';
+import OutfitPanel from '@/components/OutfitPanel';
+import ImagePanel from '@/components/ImagePanel';
 import VRMPanel from '@/components/VRMPanel';
 import ChessPanel from '@/components/ChessPanel';
 import PetPanel from '@/components/PetPanel';
@@ -15,7 +17,7 @@ import StatusBar from '@/components/StatusBar';
 import { Button } from '@/components/ui/button';
 import { 
   MessageSquare, Settings, Shield, Brain, Smile, Swords, Heart, 
-  Edit3, Menu, X, Sparkles
+  Edit3, Menu, X, Sparkles, Image as ImageIcon
 } from 'lucide-react';
 
 interface Tab {
@@ -30,6 +32,8 @@ const tabs: Tab[] = [
   { id: 'settings', label: 'Settings', icon: <Settings className="w-4 h-4" />, component: SettingsPanel },
   { id: 'permissions', label: 'Permissions', icon: <Shield className="w-4 h-4" />, component: PermissionPanel },
   { id: 'memory', label: 'Memory', icon: <Brain className="w-4 h-4" />, component: MemoryPanel },
+  { id: 'images', label: 'Images', icon: <ImageIcon className="w-4 h-4" />, component: ImagePanel },
+  { id: 'outfit', label: 'Outfit', icon: <Sparkles className="w-4 h-4" />, component: OutfitPanel },
   { id: 'vrm', label: 'VRM', icon: <Smile className="w-4 h-4" />, component: VRMPanel },
   { id: 'chess', label: 'Chess', icon: <Swords className="w-4 h-4" />, component: ChessPanel },
   { id: 'pet', label: 'Pet', icon: <Heart className="w-4 h-4" />, component: PetPanel },

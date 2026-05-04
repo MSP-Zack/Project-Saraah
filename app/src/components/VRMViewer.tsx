@@ -145,6 +145,7 @@ export default function VRMViewer() {
     window.addEventListener('vrm-expression', onExpressionEvent as EventListener);
     window.addEventListener('vrm-animation', onAnimationEvent as EventListener);
     window.addEventListener('vrm-lipsync', onLipSyncEvent as EventListener);
+    window.addEventListener('vrm-outfit-change', onOutfitChange as EventListener);
 
     // Click handler for body interactions
     canvas.addEventListener('click', onCanvasClick);
@@ -154,10 +155,103 @@ export default function VRMViewer() {
       window.removeEventListener('vrm-expression', onExpressionEvent as EventListener);
       window.removeEventListener('vrm-animation', onAnimationEvent as EventListener);
       window.removeEventListener('vrm-lipsync', onLipSyncEvent as EventListener);
+      window.removeEventListener('vrm-outfit-change', onOutfitChange as EventListener);
       canvas.removeEventListener('click', onCanvasClick);
       renderer.dispose();
     };
   }, []);
+
+  const setObjectOpacity = (object: THREE.Object3D, opacity: number) => {
+    object.traverse((child: any) => {
+      if (child.material) {
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        materials.forEach((material: any) => {
+          if (material) {
+            material.transparent = true;
+            material.opacity = opacity;
+          }
+        });
+      }
+    });
+  };
+
+  const loadVRMModel = useCallback((modelPath: string, transitionType: 'fade' | 'cut' = 'fade') => {
+    if (!sceneRef.current) return;
+    const { scene } = sceneRef.current;
+    const oldVrm = sceneRef.current.vrm;
+
+    if (transitionType === 'fade' && oldVrm) {
+      setObjectOpacity(oldVrm.scene, 0);
+    }
+
+    const loader = new GLTFLoader();
+    loader.register((parser) => new VRMLoaderPlugin(parser));
+
+    loader.load(
+      modelPath,
+      (gltf) => {
+        const vrm = gltf.userData.vrm as VRM;
+
+        if (oldVrm) {
+          scene.remove(oldVrm.scene);
+        }
+
+        sceneRef.current!.vrm = vrm;
+        scene.add(vrm.scene);
+
+        // Setup VRM
+        vrm.scene.rotation.y = Math.PI;
+
+        // Fix arm positions
+        const rArm = vrm.humanoid.getNormalizedBoneNode('rightUpperArm');
+        const lArm = vrm.humanoid.getNormalizedBoneNode('leftUpperArm');
+        if (rArm) rArm.rotation.z = -1.2;
+        if (lArm) lArm.rotation.z = 1.2;
+
+        // Setup lookAt
+        if (vrm.lookAt) {
+          vrm.lookAt.target = sceneRef.current!.camera;
+        }
+
+        // Create animation mixer
+        sceneRef.current!.mixer = new THREE.AnimationMixer(vrm.scene);
+
+        // Fade in
+        if (transitionType === 'fade') {
+          setObjectOpacity(vrm.scene, 0);
+          requestAnimationFrame(function fadeStep() {
+            const currentOpacity = (vrm.scene as any).userData?.opacity ?? 0;
+            const nextOpacity = Math.min(1, currentOpacity + 0.06);
+            setObjectOpacity(vrm.scene, nextOpacity);
+            (vrm.scene as any).userData = { opacity: nextOpacity };
+            if (nextOpacity < 1) {
+              requestAnimationFrame(fadeStep);
+            }
+          });
+        }
+
+        // Update store
+        useStore.getState().vrmState.currentVrm = vrm;
+
+        console.log('[VRM]: Model loaded successfully', modelPath);
+      },
+      (progress) => {
+        const p = Math.round((progress.loaded / progress.total) * 100);
+        console.log(`[VRM]: Loading... ${p}%`);
+      },
+      (error) => {
+        console.error('[VRM]: Load error:', error);
+      }
+    );
+  }, []);
+
+  const onOutfitChange = (e: CustomEvent) => {
+    const detail = e.detail as any;
+    const outfitPath = detail?.outfitData?.path || detail?.path;
+    if (outfitPath) {
+      loadVRMModel(outfitPath, 'fade');
+    }
+  };
 
   const loadVRM = () => {
     if (!sceneRef.current) return;

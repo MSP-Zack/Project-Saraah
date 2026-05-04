@@ -77,6 +77,18 @@ class PermissionManager:
                 "description": "Sarah can modify her own memory entries",
                 "risk": "medium",
                 "icon": "brain"
+            },
+            "diary_access": {
+                "enabled": True,
+                "description": "Sarah can read and write her private diary file",
+                "risk": "medium",
+                "icon": "notebook"
+            },
+            "image_generation": {
+                "enabled": False,
+                "description": "Sarah can generate or fetch images using the internet and browser tools",
+                "risk": "medium",
+                "icon": "image"
             }
         }
         self.permissions = self.load_permissions()
