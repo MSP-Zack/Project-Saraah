@@ -15,19 +15,25 @@ class TamagotchiPet:
     def __init__(self):
         self.save_file = "memory/tamagotchi.json"
         self.state = self._load_or_create()
-        self.last_update = datetime.now()
+        # load last checked time from state if present, otherwise now
+        try:
+            self.last_update = datetime.fromisoformat(self.state.get('last_checked'))
+        except Exception:
+            self.last_update = datetime.now()
     
     def _load_or_create(self) -> Dict:
         if os.path.exists(self.save_file):
             with open(self.save_file, 'r') as f:
                 return json.load(f)
         
+        now_iso = datetime.now().isoformat()
         return {
             "name": "Pixel",
             "species": "fox",
             "stage": "baby",  # baby -> child -> teen -> adult
             "age_days": 0,
             "birth_date": datetime.now().isoformat(),
+            "last_checked": now_iso,
             
             # Core needs (0-100)
             "hunger": 80,        # 100 = full, 0 = starving
@@ -60,6 +66,8 @@ class TamagotchiPet:
             "last_pet": datetime.now().isoformat(),
             "last_cleaned": datetime.now().isoformat(),
             "last_played": datetime.now().isoformat(),
+            # When the state was last checked/updated
+            "last_checked": now_iso,
             
             # Messages from the pet
             "recent_messages": []
@@ -67,34 +75,53 @@ class TamagotchiPet:
     
     def save(self):
         os.makedirs(os.path.dirname(self.save_file), exist_ok=True)
+        # Update last_checked and age before saving
+        now = datetime.now()
+        try:
+            birth = datetime.fromisoformat(self.state.get('birth_date'))
+            self.state['age_days'] = (now - birth).days
+        except Exception:
+            self.state['age_days'] = self.state.get('age_days', 0)
+        self.state['last_checked'] = now.isoformat()
         with open(self.save_file, 'w') as f:
             json.dump(self.state, f, indent=2)
     
     def _update_needs(self):
         """Update needs based on time passed."""
         now = datetime.now()
-        last = datetime.fromisoformat(self.state["last_fed"])
-        hours_passed = (now - last).total_seconds() / 3600
-        
-        # Decay rates per hour
-        self.state["hunger"] = max(0, self.state["hunger"] - hours_passed * 3)
-        self.state["energy"] = max(0, self.state["energy"] - hours_passed * 2)
-        self.state["happiness"] = max(0, self.state["happiness"] - hours_passed * 1.5)
-        self.state["hygiene"] = max(0, self.state["hygiene"] - hours_passed * 1)
+        # Use the stored last_checked to compute elapsed time
+        try:
+            last_checked = datetime.fromisoformat(self.state.get('last_checked'))
+        except Exception:
+            last_checked = self.last_update or now
+
+        hours_passed = (now - last_checked).total_seconds() / 3600.0
+
+        # Decay rates per hour (tunable)
+        self.state["hunger"] = max(0.0, self.state["hunger"] - hours_passed * 3.0)
+        self.state["energy"] = max(0.0, self.state["energy"] - hours_passed * 2.0)
+        self.state["happiness"] = max(0.0, self.state["happiness"] - hours_passed * 1.5)
+        self.state["hygiene"] = max(0.0, self.state["hygiene"] - hours_passed * 1.0)
         
         # Health affected by other needs
         if self.state["hunger"] < 20 or self.state["hygiene"] < 20:
-            self.state["health"] = max(0, self.state["health"] - hours_passed * 2)
+            self.state["health"] = max(0.0, self.state["health"] - hours_passed * 2.0)
         elif self.state["health"] < 100:
-            self.state["health"] = min(100, self.state["health"] + hours_passed * 1)
+            self.state["health"] = min(100.0, self.state["health"] + hours_passed * 1.0)
         
-        # Determine mood
+        # Determine mood and evolution
         self._update_mood()
-        
-        # Evolution check
+        # Update age in days and check evolution
+        try:
+            birth = datetime.fromisoformat(self.state.get('birth_date'))
+            self.state['age_days'] = (now - birth).days
+        except Exception:
+            pass
         self._check_evolution()
-        
+
+        # Persist last checked
         self.last_update = now
+        self.state['last_checked'] = now.isoformat()
         self.save()
     
     def _update_mood(self):

@@ -260,29 +260,103 @@ class ChessGame:
         
         if not move_found:
             return {"success": False, "error": "Invalid move"}
-        
-        # Execute move
+        # Execute move with en-passant and castling handling
+        color = self._get_piece_color(piece)
+
+        # Keep reference to previous en-passant data
+        ep = self.en_passant_target
+
+        # Normal capture target
         captured = self.board[to_row][to_col]
-        if captured != '.':
-            if self.current_player == 'white':
-                self.captured_black.append(captured)
-            else:
-                self.captured_white.append(captured)
-        
+
+        # En-passant capture detection: if moving pawn lands on en-passant target
+        if piece.lower() == 'p' and captured == '.' and ep and isinstance(ep, dict) and tuple(ep.get('target', ())) == (to_row, to_col):
+            victim_r, victim_c = ep.get('victim')
+            captured = self.board[victim_r][victim_c]
+            # remove the victim pawn
+            self.board[victim_r][victim_c] = '.'
+            if captured != '.':
+                if color == 'white':
+                    self.captured_black.append(captured)
+                else:
+                    self.captured_white.append(captured)
+        else:
+            if captured != '.':
+                if color == 'white':
+                    self.captured_black.append(captured)
+                else:
+                    self.captured_white.append(captured)
+
+        # Move the piece
         self.board[to_row][to_col] = piece
         self.board[from_row][from_col] = '.'
-        
-        # Pawn promotion
+
+        # Castling: move rook when king moves two squares
+        if piece.lower() == 'k' and abs(to_col - from_col) == 2:
+            row = to_row
+            if to_col == 6:
+                # king-side
+                rook_from_col, rook_to_col = 7, 5
+            else:
+                # queen-side
+                rook_from_col, rook_to_col = 0, 3
+            # Move rook
+            self.board[row][rook_to_col] = self.board[row][rook_from_col]
+            self.board[row][rook_from_col] = '.'
+
+        # Pawn promotion (simple: auto-queen)
         if piece.lower() == 'p' and (to_row == 0 or to_row == 7):
-            self.board[to_row][to_col] = 'Q' if self.current_player == 'white' else 'q'
-        
+            self.board[to_row][to_col] = 'Q' if color == 'white' else 'q'
+
+        # Update castling rights when king or rook moves or is captured
+        if piece.lower() == 'k':
+            if color == 'white':
+                self.castling_rights['K'] = False
+                self.castling_rights['Q'] = False
+            else:
+                self.castling_rights['k'] = False
+                self.castling_rights['q'] = False
+
+        if piece.lower() == 'r':
+            # Rook moved from original corner
+            if color == 'white':
+                if from_row == 7 and from_col == 7:
+                    self.castling_rights['K'] = False
+                if from_row == 7 and from_col == 0:
+                    self.castling_rights['Q'] = False
+            else:
+                if from_row == 0 and from_col == 7:
+                    self.castling_rights['k'] = False
+                if from_row == 0 and from_col == 0:
+                    self.castling_rights['q'] = False
+
+        # If a rook was captured on its original square, update rights
+        if captured != '.' and captured.lower() == 'r':
+            if to_row == 7 and to_col == 7:
+                self.castling_rights['K'] = False
+            if to_row == 7 and to_col == 0:
+                self.castling_rights['Q'] = False
+            if to_row == 0 and to_col == 7:
+                self.castling_rights['k'] = False
+            if to_row == 0 and to_col == 0:
+                self.castling_rights['q'] = False
+
+        # Set en-passant target for double pawn moves (stores victim coord too)
+        if piece.lower() == 'p' and abs(to_row - from_row) == 2:
+            self.en_passant_target = {
+                'target': ((from_row + to_row) // 2, to_col),
+                'victim': (to_row, to_col)
+            }
+        else:
+            self.en_passant_target = None
+
         # Record move
         move_notation = self._algebraic_notation(from_row, from_col, to_row, to_col, piece, captured != '.')
         self.move_history.append(move_notation)
-        
+
         # Switch player
         self.current_player = 'black' if self.current_player == 'white' else 'white'
-        
+
         # Check game state
         if not self.get_all_valid_moves():
             if self._is_in_check(self.current_player):
@@ -291,7 +365,7 @@ class ChessGame:
             else:
                 self.game_over = True
                 self.draw = True
-        
+
         return {
             "success": True,
             "move": move_notation,
