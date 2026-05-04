@@ -15,3 +15,6 @@ playwright>=1.40.0
 requests>=2.31.0
 pydantic>=2.5.0
 chess>=1.10.0
+pymupdf>=1.22.0
+ebooklib>=0.18
+beautifulsoup4>=4.12.0

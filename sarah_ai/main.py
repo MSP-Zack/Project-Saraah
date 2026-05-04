@@ -35,6 +35,7 @@ from core.permission_manager import PermissionManager
 from core.action_engine import ActionEngine
 from core.vrm_action_engine import VRMActionEngine
 from plugins.plugin_manager import PluginManager
+from core.ebook_reader import EbookReader
 
 app = FastAPI(title="Sarah AI Companion", version="2.0.0")
 
@@ -64,6 +65,7 @@ permission_manager: Optional[PermissionManager] = None
 action_engine: Optional[ActionEngine] = None
 vrm_actions: Optional[VRMActionEngine] = None
 plugin_manager: Optional[PluginManager] = None
+ebook_reader: Optional[EbookReader] = None
 
 # WebSocket connections
 connected_clients: list = []
@@ -155,7 +157,10 @@ def initialize():
     plugin_manager.load_plugin("collab_editor")
     plugin_manager.load_plugin("image_generation")
     print(f"[INIT]: Plugins loaded - {plugin_manager.list_plugins()}")
-    
+
+    # Ebook reader
+    ebook_reader = EbookReader()
+    print(f"[INIT]: Ebook reader initialized at {ebook_reader.base}")
     print("=" * 60)
     print("  SARAH IS ONLINE AND READY")
     print("=" * 60)
@@ -533,6 +538,131 @@ def get_vrm_actions():
     if vrm_actions:
         return vrm_actions.get_all_actions()
     return {}
+
+
+# ========== EBOOKS / READER ==========
+
+
+@app.post('/api/ebooks/upload')
+async def upload_ebook(file: UploadFile = File(...)):
+    """Upload an ebook file (PDF, EPUB, or TXT)."""
+    if not ebook_reader:
+        return {"success": False, "error": "Ebook reader not initialized"}
+    try:
+        contents = await file.read()
+        meta = ebook_reader.save_upload(file.filename, contents)
+        return {"success": True, "ebook": meta}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get('/api/ebooks/list')
+def list_ebooks():
+    if not ebook_reader:
+        return {"ebooks": {}}
+    return {"ebooks": ebook_reader.list_ebooks()}
+
+
+@app.get('/api/ebooks/meta/{ebook_id}')
+def ebook_meta(ebook_id: str):
+    if not ebook_reader:
+        return {"success": False, "error": "Ebook reader not initialized"}
+    try:
+        meta = ebook_reader.get_metadata(ebook_id)
+        return {"success": True, "meta": meta}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get('/api/ebooks/text/{ebook_id}')
+def ebook_text(ebook_id: str, start_page: int = None, end_page: int = None):
+    if not ebook_reader:
+        return {"success": False, "error": "Ebook reader not initialized"}
+    try:
+        text = ebook_reader.extract_text(ebook_id, start_page, end_page)
+        return {"success": True, "text": text}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def _split_text_for_tts(text: str, max_chars: int = 3000) -> List[str]:
+    """Split text into near-sentence chunks under max_chars."""
+    import re
+    sentences = re.split(r'(?<=[\.!?])\s+', text)
+    chunks: List[str] = []
+    cur = ''
+    for s in sentences:
+        if len(cur) + len(s) + 1 <= max_chars:
+            cur = (cur + ' ' + s).strip()
+        else:
+            if cur:
+                chunks.append(cur)
+            cur = s
+    if cur:
+        chunks.append(cur)
+    # If a single sentence is too long, break it forcefully
+    out: List[str] = []
+    for c in chunks:
+        if len(c) <= max_chars:
+            out.append(c)
+        else:
+            # force split
+            for i in range(0, len(c), max_chars):
+                out.append(c[i:i+max_chars])
+    return out
+
+
+@app.post('/api/ebooks/read')
+async def read_ebook(ebook_id: str = Form(...), start_page: int = Form(None), end_page: int = Form(None), profile: str = Form(None), rate: str = Form(None)):
+    """Generate TTS audio for the requested ebook segment and return audio URLs.
+
+    Returns a list of generated audio files (segments) to play sequentially.
+    """
+    if not ebook_reader:
+        return {"success": False, "error": "Ebook reader not initialized"}
+    if not tts_engine:
+        return {"success": False, "error": "TTS engine not initialized"}
+
+    try:
+        text = ebook_reader.extract_text(ebook_id, start_page, end_page)
+        if not text:
+            return {"success": False, "error": "No text extracted"}
+
+        # Optionally set profile
+        if profile:
+            try:
+                tts_engine.set_profile(profile)
+            except Exception:
+                pass
+
+        # Optionally set playback rate (e.g. '+10%', '-10%')
+        if rate:
+            try:
+                tts_engine.rate = rate
+            except Exception:
+                pass
+
+        segments = _split_text_for_tts(text, max_chars=3000)
+        audio_urls: List[str] = []
+        base_audio_dir = Path(__file__).parent / 'static' / 'ebooks' / 'audio'
+        os.makedirs(base_audio_dir, exist_ok=True)
+
+        safe_start = start_page or 0
+        safe_end = end_page or 0
+
+        for idx, seg in enumerate(segments):
+            fname = f"{ebook_id}_{safe_start}_{safe_end}_seg{idx}.mp3"
+            out_path = str(base_audio_dir / fname)
+            try:
+                ap = await tts_engine.speak_to_file(seg, out_path)
+                if ap:
+                    audio_urls.append(f"/static/ebooks/audio/{fname}")
+            except Exception as e:
+                print(f"[EBOOK READ]: TTS error for segment {idx}: {e}")
+
+        return {"success": True, "audio_urls": audio_urls}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 # ========== OUTFIT MANAGEMENT ==========
 
