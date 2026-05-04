@@ -14,10 +14,11 @@ import PetPanel from '@/components/PetPanel';
 import EditorPanel from '@/components/EditorPanel';
 import ThinkingDisplay from '@/components/ThinkingDisplay';
 import StatusBar from '@/components/StatusBar';
+import NotesPanel from '@/components/NotesPanel';
 import { Button } from '@/components/ui/button';
 import { 
   MessageSquare, Settings, Shield, Brain, Smile, Swords, Heart, 
-  Edit3, Menu, X, Sparkles, Image as ImageIcon
+  Edit3, Menu, X, Sparkles, Image as ImageIcon, FileText
 } from 'lucide-react';
 
 interface Tab {
@@ -32,6 +33,7 @@ const tabs: Tab[] = [
   { id: 'settings', label: 'Settings', icon: <Settings className="w-4 h-4" />, component: SettingsPanel },
   { id: 'permissions', label: 'Permissions', icon: <Shield className="w-4 h-4" />, component: PermissionPanel },
   { id: 'memory', label: 'Memory', icon: <Brain className="w-4 h-4" />, component: MemoryPanel },
+  { id: 'notes', label: 'Notes', icon: <FileText className="w-4 h-4" />, component: NotesPanel },
   { id: 'images', label: 'Images', icon: <ImageIcon className="w-4 h-4" />, component: ImagePanel },
   { id: 'outfit', label: 'Outfit', icon: <Sparkles className="w-4 h-4" />, component: OutfitPanel },
   { id: 'vrm', label: 'VRM', icon: <Smile className="w-4 h-4" />, component: VRMPanel },

@@ -11,8 +11,11 @@ import base64
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any
+import uuid
+import shutil
+import time
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, File, UploadFile
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, File, UploadFile, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -194,11 +197,229 @@ class ImageGenerateRequest(BaseModel):
     style: Optional[str] = "creative"
     count: Optional[int] = 1
 
+
+@app.get("/api/status")
+def get_status():
+    """Return runtime status and subsystem summaries."""
+    return {
+        "runtime": runtime_state,
         "action_status": action_engine.get_status() if action_engine else {},
         "memory_stats": memory_engine.get_stats() if memory_engine else {},
         "voice_profiles": tts_engine.profiles if tts_engine else {},
         "plugins": plugin_manager.list_plugins() if plugin_manager else []
     }
+
+
+@app.get("/api/tts/voices")
+def get_tts_voices():
+    """Return available TTS voices and profiles from the TTS engine."""
+    if tts_engine:
+        return tts_engine.get_voice_list()
+    return {"voices": {}, "profiles": {}, "current": "default"}
+
+
+@app.get("/api/tts/preview")
+async def preview_tts(profile: str = "default"):
+    """Generate a short preview audio for the given profile or voice key and return the URL."""
+    if not tts_engine:
+        return {"success": False, "error": "TTS engine not initialized"}
+
+    # If a profile name is provided, map to voice key
+    voice_key = profile
+    if profile in tts_engine.profiles:
+        voice_key = tts_engine.profiles[profile].get("voice", profile)
+
+    try:
+        preview_path = await tts_engine.preview_voice(voice_key)
+        return {"success": True, "preview_url": "/static/preview.mp3" if preview_path else None}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/tts/clone")
+async def clone_tts_sample(display_name: str = Form(...), file: UploadFile = File(...)):
+    """Upload a short sample clip to register a custom voice sample.
+    NOTE: This stores a sample and registers a custom voice ID. Real voice cloning/synthesis
+    is not implemented here — this is a scaffold for future integration.
+    """
+    samples_dir = Path(__file__).parent / "static" / "voices" / "samples"
+    os.makedirs(samples_dir, exist_ok=True)
+
+    # Save uploaded file
+    ext = Path(file.filename).suffix or ".wav"
+    cid = str(uuid.uuid4())[:8]
+    filename = f"{cid}{ext}"
+    dest = samples_dir / filename
+    try:
+        contents = await file.read()
+        with open(dest, "wb") as f:
+            f.write(contents)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+    # Register custom voice in TTS engine
+    if tts_engine:
+        entry = tts_engine.add_custom_voice(cid, str(dest), {"name": display_name, "status": "uploaded", "created_at": datetime.now().isoformat()})
+        # Schedule background processing to attempt provider cloning if configured
+        try:
+            asyncio.create_task(process_clone_job(cid))
+        except Exception:
+            pass
+
+    return {"success": True, "id": cid, "sample_url": f"/static/voices/samples/{filename}", "profile_key": f"custom:{cid}"}
+
+
+async def process_clone_job(custom_id: str):
+    """Background task to process an uploaded sample via configured provider (if any).
+    Currently this will mark the sample as ready and attach a note if no provider is configured.
+    """
+    if not tts_engine:
+        return
+    try:
+        entry = tts_engine.custom_voices.get(custom_id)
+        if not entry:
+            return
+        # mark processing
+        entry["status"] = "processing"
+
+        # Provider processing: prefer COQUI (free self-hosted) if configured,
+        # otherwise prefer Resemble if an API key is present. If none configured,
+        # keep sample available for preview only.
+        coqui_url = os.environ.get("COQUI_TTS_URL")
+        api_key = os.environ.get("RESEMBLE_API_KEY")
+
+        if coqui_url:
+            try:
+                # Lazy import to avoid requiring adapter at startup
+                from core.tts_providers.coqui import CoquiAdapter
+                adapter = CoquiAdapter()
+                provider_id = await asyncio.to_thread(adapter.create_voice_from_sample, entry.get("path"), entry.get("name"))
+                entry["provider"] = "coqui"
+                entry["provider_id"] = provider_id
+                entry["status"] = "ready"
+                entry["note"] = f"Cloned via Coqui (id={provider_id})"
+            except Exception as e:
+                entry["status"] = "failed"
+                entry["error"] = str(e)
+        elif api_key:
+            # Implement provider adapter here (Resemble integration can be added later).
+            entry["provider"] = "resemble"
+            entry["provider_id"] = None
+            entry["status"] = "ready"
+            entry["note"] = "Provider configured but automatic cloning adapter not implemented in this build. See VOICE_CLONE.md to enable."
+        else:
+            entry["status"] = "ready"
+            entry["note"] = "Sample uploaded and available for preview. No provider configured."
+    except Exception as e:
+        try:
+            tts_engine.custom_voices[custom_id]["status"] = "failed"
+            tts_engine.custom_voices[custom_id]["error"] = str(e)
+        except:
+            pass
+
+
+@app.post("/api/tts/custom/{custom_id}/process")
+def trigger_custom_processing(custom_id: str):
+    """Trigger processing of a custom voice sample (manual)."""
+    if not tts_engine:
+        return {"success": False, "error": "TTS engine not initialized"}
+    try:
+        asyncio.create_task(process_clone_job(custom_id))
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/tts/custom/{custom_id}")
+def get_custom_voice(custom_id: str):
+    if not tts_engine:
+        return {"success": False, "error": "TTS engine not initialized"}
+    entry = tts_engine.custom_voices.get(custom_id)
+    if not entry:
+        return {"success": False, "error": "Not found"}
+    return {"success": True, "custom": entry}
+
+
+@app.get("/api/tts/custom/list")
+def list_custom_voices():
+    if tts_engine:
+        return {"custom_voices": tts_engine.list_custom_voices()}
+    return {"custom_voices": {}}
+
+
+@app.delete("/api/tts/custom/{custom_id}")
+def delete_custom_voice(custom_id: str):
+    """Delete a previously uploaded custom voice sample."""
+    if not tts_engine:
+        return {"success": False, "error": "TTS engine not initialized"}
+    ok = tts_engine.remove_custom_voice(custom_id)
+    if ok:
+        return {"success": True}
+    return {"success": False, "error": "Custom voice not found or could not be removed"}
+
+
+@app.get("/api/tts/providers")
+def list_tts_providers():
+    """Return supported TTS providers for UI selection."""
+    providers = [
+        {"key": "edge_tts", "name": "Edge (local)", "notes": "Built-in edge_tts voices"},
+        {"key": "resemble", "name": "Resemble.ai (cloud)", "notes": "Cloud voice cloning (requires API key)"},
+        {"key": "coqui", "name": "Coqui (self-host)", "notes": "Self-hosted TTS/voice cloning"},
+        {"key": "none", "name": "Manual / None", "notes": "No automatic TTS provider selected"},
+    ]
+    return {"providers": providers}
+
+
+### Notes / Sticky Notes API
+NOTES_FILE = Path(__file__).parent / "data" / "notes.json"
+os.makedirs(NOTES_FILE.parent, exist_ok=True)
+
+def _load_notes():
+    if NOTES_FILE.exists():
+        try:
+            with open(NOTES_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def _save_notes(notes):
+    with open(NOTES_FILE, "w", encoding="utf-8") as f:
+        json.dump(notes, f, ensure_ascii=False, indent=2)
+
+
+@app.get("/api/notes")
+def get_notes():
+    notes = _load_notes()
+    return {"notes": notes}
+
+
+class NoteCreate(BaseModel):
+    title: str
+    content: str
+    pinned: Optional[bool] = False
+
+
+@app.post("/api/notes")
+def create_note(note: NoteCreate):
+    notes = _load_notes()
+    nid = str(int(time.time() * 1000))
+    entry = {"id": nid, "title": note.title, "content": note.content, "pinned": note.pinned, "created_at": datetime.now().isoformat()}
+    notes.insert(0, entry)
+    _save_notes(notes)
+
+    # Broadcast note creation to connected clients so they can show notifications
+    asyncio.create_task(broadcast_message({"action": "note_created", "note": entry, "timestamp": datetime.now().isoformat()}))
+
+    return {"success": True, "note": entry}
+
+
+@app.delete("/api/notes/{note_id}")
+def delete_note(note_id: str):
+    notes = _load_notes()
+    new = [n for n in notes if n.get("id") != note_id]
+    _save_notes(new)
+    return {"success": True}
 
 @app.get("/api/permissions")
 def get_permissions():

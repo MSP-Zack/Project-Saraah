@@ -1,17 +1,47 @@
 import { useStore } from '@/hooks/useStore';
+import { useState, useEffect, useRef } from 'react';
 import { getWebSocket } from '@/hooks/useWebSocket';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectGroup, SelectLabel, SelectTrigger, SelectValue, SelectSeparator } from '@/components/ui/select';
 import { Card } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Settings, Brain, MessageCircle, Volume2, Eye, Sparkles } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 
 export default function SettingsPanel() {
   const store = useStore();
+  const [profiles, setProfiles] = useState<Record<string, any>>({});
+  const [voices, setVoices] = useState<Record<string, any>>({});
+  const [customVoices, setCustomVoices] = useState<Record<string, any>>({});
+  const [provider, setProvider] = useState<string>(localStorage.getItem('tts_provider') || 'edge_tts');
+  const [search, setSearch] = useState<string>('');
+  const [uploading, setUploading] = useState(false);
+  const [sampleName, setSampleName] = useState('');
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(typeof Notification !== 'undefined' && Notification.permission === 'granted');
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/tts/voices');
+        const data = await res.json();
+        if (mounted && data) {
+          setProfiles(data.profiles || {});
+          setVoices(data.voices || {});
+          setCustomVoices(data.custom_voices || {});
+          if (data.current) store.setVoiceProfile(data.current);
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
+    return () => { mounted = false };
+  }, []);
 
   const sendConfig = (updates: any) => {
     const ws = getWebSocket();
@@ -26,6 +56,31 @@ export default function SettingsPanel() {
 
   const handleSavePrompt = () => {
     sendConfig({ system_prompt: store.systemPrompt });
+  };
+
+  const requestNotificationPermission = async () => {
+    if (typeof Notification === 'undefined') return alert('Notifications are not supported in this environment');
+    if (Notification.permission === 'granted') return setNotificationsEnabled(true);
+    const perm = await Notification.requestPermission();
+    setNotificationsEnabled(perm === 'granted');
+  };
+
+  const enableBackgroundAudio = () => {
+    try {
+      // Creating/resuming an AudioContext on user gesture allows audio playback in background tabs in many browsers
+      // We store it on window so other parts of the app can reuse it for TTS playback.
+      const w = window as any;
+      if (!w.__sarah_audio_ctx) {
+        const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext);
+        if (!AudioCtx) return alert('AudioContext not supported in this browser');
+        w.__sarah_audio_ctx = new AudioCtx();
+      }
+      if (w.__sarah_audio_ctx.state === 'suspended') w.__sarah_audio_ctx.resume();
+      alert('Background audio enabled. TTS playback will use the shared audio context when available.');
+    } catch (e) {
+      console.error('Failed to enable background audio', e);
+      alert('Failed to enable background audio');
+    }
   };
 
   return (
@@ -60,27 +115,194 @@ export default function SettingsPanel() {
             <Volume2 className="w-4 h-4 text-pink-400" />
             <h3 className="text-sm font-medium text-white">Voice Profile</h3>
           </div>
-          <Select
-            value={store.voiceProfile}
-            onValueChange={(value) => {
-              store.setVoiceProfile(value);
-              const ws = getWebSocket();
-              if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'voice_profile', profile: value }));
-              }
-            }}
-          >
-            <SelectTrigger className="bg-white/5 border-white/10 text-white">
-              <SelectValue placeholder="Select voice" />
-            </SelectTrigger>
-            <SelectContent className="bg-gray-900 border-white/20">
-              <SelectItem value="default">Sarah Cute (Default)</SelectItem>
-              <SelectItem value="excited">Excited</SelectItem>
-              <SelectItem value="shy">Shy</SelectItem>
-              <SelectItem value="tsundere">Tsundere</SelectItem>
-              <SelectItem value="gentle">Gentle</SelectItem>
-            </SelectContent>
-          </Select>
+
+          <div className="flex flex-col md:flex-row md:items-center md:gap-4 gap-3">
+            <div className="flex-1">
+              <Select
+                value={store.voiceProfile}
+                onValueChange={(value) => {
+                  store.setVoiceProfile(value);
+                  const ws = getWebSocket();
+                  if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'voice_profile', profile: value }));
+                  }
+                }}
+              >
+                <SelectTrigger className="bg-white/5 border-white/10 text-white w-full">
+                  <SelectValue placeholder="Select voice or profile" />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-900 border-white/20">
+                  <div className="p-2">
+                    <Input
+                      placeholder="Search profiles, voices, custom..."
+                      value={search}
+                      onChange={(e) => setSearch((e.target as HTMLInputElement).value)}
+                      className="mb-2"
+                    />
+                  </div>
+
+                  <SelectGroup>
+                    <SelectLabel>Presets</SelectLabel>
+                    {Object.keys(profiles).length > 0 ? (
+                      Object.keys(profiles)
+                        .filter((k) => k.toLowerCase().includes(search.toLowerCase()))
+                        .map((key) => (
+                          <SelectItem key={key} value={key}>{key.charAt(0).toUpperCase() + key.slice(1)}</SelectItem>
+                        ))
+                    ) : (
+                      <>
+                        <SelectItem value="default">Sarah Cute (Default)</SelectItem>
+                        <SelectItem value="excited">Excited</SelectItem>
+                        <SelectItem value="shy">Shy</SelectItem>
+                        <SelectItem value="tsundere">Tsundere</SelectItem>
+                        <SelectItem value="gentle">Gentle</SelectItem>
+                      </>
+                    )}
+                  </SelectGroup>
+
+                  <SelectSeparator />
+
+                  <SelectGroup>
+                    <SelectLabel>Voices</SelectLabel>
+                    {Object.keys(voices).length > 0 ? (
+                      Object.keys(voices).filter((v) => v.toLowerCase().includes(search.toLowerCase())).map((v) => (
+                        <SelectItem key={v} value={v}>{v.replace(/_/g, ' ')}</SelectItem>
+                      ))
+                    ) : null}
+                  </SelectGroup>
+
+                  <SelectSeparator />
+
+                  <SelectGroup>
+                    <SelectLabel>Custom Voices</SelectLabel>
+                    {Object.keys(customVoices).length > 0 ? (
+                      Object.keys(customVoices).filter((id) => (customVoices[id].name || id).toLowerCase().includes(search.toLowerCase())).map((id) => (
+                        <SelectItem key={id} value={`custom:${id}`}>{customVoices[id].name || id}</SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="">No custom voices</SelectItem>
+                    )}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`/api/tts/preview?profile=${encodeURIComponent(store.voiceProfile)}`);
+                    const data = await res.json();
+                    const url = data.preview_url || data.preview || '/static/preview.mp3';
+                    if (data.success && url) {
+                      const audio = new Audio(url + '?t=' + Date.now());
+                      audio.play().catch(() => {});
+                    }
+                  } catch (e) {
+                    console.error('Preview failed', e);
+                  }
+                }}
+              >
+                Preview
+              </Button>
+
+              <div className="ml-2 text-xs text-white/60">Provider:</div>
+              <Select value={provider} onValueChange={(v) => { setProvider(v); localStorage.setItem('tts_provider', v); }}>
+                <SelectTrigger className="bg-white/5 border-white/10 text-white h-8 w-48">
+                  <SelectValue placeholder="Provider" />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-900 border-white/20">
+                  <SelectItem value="edge_tts">Edge (local)</SelectItem>
+                  <SelectItem value="resemble">Resemble.ai (cloud)</SelectItem>
+                  <SelectItem value="coqui">Coqui (self-host)</SelectItem>
+                  <SelectItem value="none">None / Manual</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Upload / register custom voice sample */}
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
+            <Input placeholder="Sample display name (e.g. Alex Waifu)" value={sampleName} onChange={(e) => setSampleName((e.target as HTMLInputElement).value)} className="md:col-span-2" />
+            <input ref={fileRef} type="file" accept="audio/*" className="hidden" />
+            <div className="flex items-center gap-2 md:col-span-1">
+              <Button size="sm" onClick={() => fileRef.current?.click()} className="w-full">Choose File</Button>
+              <Button size="sm" onClick={async () => {
+                if (!fileRef.current?.files?.length) return alert('Please choose a file');
+                if (!sampleName) return alert('Please enter a display name for the sample');
+                setUploading(true);
+                try {
+                  const form = new FormData();
+                  form.append('display_name', sampleName);
+                  form.append('file', fileRef.current.files[0]);
+                  const res = await fetch('/api/tts/clone', { method: 'POST', body: form });
+                  const data = await res.json();
+                  if (data.success) {
+                    // Refresh voices list
+                    const vs = await (await fetch('/api/tts/voices')).json();
+                    setCustomVoices(vs.custom_voices || {});
+                    alert('Sample uploaded and registered. It appears in Custom Voices.');
+                    setSampleName('');
+                    if (fileRef.current) fileRef.current.value = '';
+                  } else {
+                    alert('Upload failed: ' + (data.error || 'unknown'));
+                  }
+                } catch (e) {
+                  console.error('Upload error', e);
+                  alert('Upload failed');
+                } finally {
+                  setUploading(false);
+                }
+              }} disabled={uploading}>{uploading ? 'Uploading...' : 'Upload'}</Button>
+            </div>
+          </div>
+
+          {/* Custom voice management */}
+          <div className="mt-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-white/60">Custom Voices</div>
+              <div className="text-xs text-white/40">Manage your uploaded samples</div>
+            </div>
+            <div className="grid grid-cols-1 gap-2">
+              {Object.keys(customVoices).length > 0 ? (
+                Object.keys(customVoices).map((id) => (
+                  <div key={id} className="flex items-center justify-between bg-white/3 p-2 rounded-md border border-white/10">
+                    <div>
+                      <div className="text-sm text-white">{customVoices[id].name || id}</div>
+                      <div className="text-xs text-white/50">{customVoices[id].path ? customVoices[id].path.split('/').slice(-1)[0] : ''}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" onClick={async () => {
+                        try {
+                          // set as active custom voice
+                          const ws = getWebSocket();
+                          if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({ type: 'voice_profile', profile: `custom:${id}` }));
+                          }
+                          store.setVoiceProfile(`custom:${id}`);
+                        } catch (e) { console.error(e); }
+                      }}>Use</Button>
+                      <Button size="sm" variant="destructive" onClick={async () => {
+                        if (!confirm('Delete this custom voice sample?')) return;
+                        try {
+                          const res = await fetch(`/api/tts/custom/${id}`, { method: 'DELETE' });
+                          const data = await res.json();
+                          if (data.success) {
+                            const vs = await (await fetch('/api/tts/voices')).json();
+                            setCustomVoices(vs.custom_voices || {});
+                          } else alert('Failed to delete');
+                        } catch (e) { console.error(e); alert('Error deleting'); }
+                      }}>Delete</Button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-xs text-white/50">No custom voices uploaded yet.</div>
+              )}
+            </div>
+          </div>
         </Card>
 
         <Separator className="bg-white/10" />
@@ -177,6 +399,20 @@ export default function SettingsPanel() {
                 if (ws) ws.send(JSON.stringify({ type: 'toggle_webcam_vision', enabled: v }));
               }}
             />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Settings className="w-4 h-4 text-amber-400" />
+              <div>
+                <Label className="text-sm text-white">Desktop Notifications</Label>
+                <p className="text-[10px] text-white/40">Allow Sarah to show notifications when the tab is in background</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" onClick={requestNotificationPermission}>{notificationsEnabled ? 'Enabled' : 'Enable'}</Button>
+              <Button size="sm" variant="outline" onClick={enableBackgroundAudio}>Enable Background Audio</Button>
+            </div>
           </div>
         </Card>
       </div>

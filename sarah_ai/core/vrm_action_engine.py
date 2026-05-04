@@ -1,5 +1,6 @@
 import json
 from typing import Dict, List, Optional
+from pathlib import Path
 
 class VRMActionEngine:
     """
@@ -129,50 +130,88 @@ class VRMActionEngine:
         return guide
     
     def get_available_outfits(self) -> Dict:
-        """List all available VRM outfit models."""
-        outfits = {
-            "default": {
-                "id": "default",
-                "name": "Sarah Classic",
-                "description": "The default Sarah outfit",
-                "path": "/static/models/sarah.vrm",
-                "thumbnail": "/static/models/thumbnails/sarah_classic.png",
-                "color_scheme": "pink_purple"
-            },
-            "futuristic": {
-                "id": "futuristic",
-                "name": "Futuristic Sarah",
-                "description": "High-tech cyberpunk outfit",
-                "path": "/static/models/sarah_futuristic.vrm",
-                "thumbnail": "/static/models/thumbnails/sarah_futuristic.png",
-                "color_scheme": "neon_blue"
-            },
-            "casual": {
-                "id": "casual",
-                "name": "Casual Sarah",
-                "description": "Comfortable everyday outfit",
-                "path": "/static/models/sarah_casual.vrm",
-                "thumbnail": "/static/models/thumbnails/sarah_casual.png",
-                "color_scheme": "warm_tones"
-            },
-            "elegant": {
-                "id": "elegant",
-                "name": "Elegant Sarah",
-                "description": "Formal gown outfit",
-                "path": "/static/models/sarah_elegant.vrm",
-                "thumbnail": "/static/models/thumbnails/sarah_elegant.png",
-                "color_scheme": "gold_white"
-            },
-            "magical": {
-                "id": "magical",
-                "name": "Magical Sarah",
-                "description": "Fantasy wizard outfit",
-                "path": "/static/models/sarah_magical.vrm",
-                "thumbnail": "/static/models/thumbnails/sarah_magical.png",
-                "color_scheme": "purple_stars"
+        """List all available VRM outfit models.
+
+        This will scan the `static/models` folder for `.vrm` files and
+        return a mapping the frontend can use. If none are found, it falls
+        back to a small set of built-in sample outfits.
+        """
+        try:
+            base = Path(__file__).parent.parent / "static" / "models"
+            thumbs = base / "thumbnails"
+            outfits: Dict[str, Dict] = {}
+
+            if base.exists():
+                for p in sorted(base.glob("*.vrm")):
+                    oid = p.stem
+                    outfits[oid] = {
+                        "id": oid,
+                        "name": oid.replace("_", " ").title(),
+                        "description": "Auto-detected VRM model",
+                        "path": f"/static/models/{p.name}",
+                        "thumbnail": f"/static/models/thumbnails/{oid}.png" if (thumbs / f"{oid}.png").exists() else None,
+                        "color_scheme": "pink_purple"
+                    }
+
+            # Fallback to built-in list when no models detected
+            if not outfits:
+                outfits = {
+                    "default": {
+                        "id": "default",
+                        "name": "Sarah Classic",
+                        "description": "The default Sarah outfit",
+                        "path": "/static/models/sarah.vrm",
+                        "thumbnail": "/static/models/thumbnails/sarah_classic.png",
+                        "color_scheme": "pink_purple"
+                    },
+                    "futuristic": {
+                        "id": "futuristic",
+                        "name": "Futuristic Sarah",
+                        "description": "High-tech cyberpunk outfit",
+                        "path": "/static/models/sarah_futuristic.vrm",
+                        "thumbnail": "/static/models/thumbnails/sarah_futuristic.png",
+                        "color_scheme": "neon_blue"
+                    },
+                    "casual": {
+                        "id": "casual",
+                        "name": "Casual Sarah",
+                        "description": "Comfortable everyday outfit",
+                        "path": "/static/models/sarah_casual.vrm",
+                        "thumbnail": "/static/models/thumbnails/sarah_casual.png",
+                        "color_scheme": "warm_tones"
+                    },
+                    "elegant": {
+                        "id": "elegant",
+                        "name": "Elegant Sarah",
+                        "description": "Formal gown outfit",
+                        "path": "/static/models/sarah_elegant.vrm",
+                        "thumbnail": "/static/models/thumbnails/sarah_elegant.png",
+                        "color_scheme": "gold_white"
+                    },
+                    "magical": {
+                        "id": "magical",
+                        "name": "Magical Sarah",
+                        "description": "Fantasy wizard outfit",
+                        "path": "/static/models/sarah_magical.vrm",
+                        "thumbnail": "/static/models/thumbnails/sarah_magical.png",
+                        "color_scheme": "purple_stars"
+                    }
+                }
+
+            return outfits
+        except Exception as e:
+            print(f"[VRM ACTIONS]: Error scanning models: {e}")
+            # Return fallback mapping on error
+            return {
+                "default": {
+                    "id": "default",
+                    "name": "Sarah Classic",
+                    "description": "The default Sarah outfit",
+                    "path": "/static/models/sarah.vrm",
+                    "thumbnail": "/static/models/thumbnails/sarah_classic.png",
+                    "color_scheme": "pink_purple"
+                }
             }
-        }
-        return outfits
     
     def get_outfit(self, outfit_id: str) -> Optional[Dict]:
         """Get a specific outfit by ID."""
