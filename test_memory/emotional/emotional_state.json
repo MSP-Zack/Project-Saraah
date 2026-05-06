@@ -1,0 +1,26 @@
+{
+  "current_state": {
+    "joy": 1.0,
+    "sadness": 0.0,
+    "anger": 0.0,
+    "fear": 0.0,
+    "surprise": 0.0,
+    "disgust": 0.0,
+    "trust": 0.0,
+    "anticipation": 0.0
+  },
+  "history": [
+    {
+      "timestamp": "2026-05-06T19:45:10.904467",
+      "emotions": {},
+      "intensity": 1.0,
+      "context": {},
+      "trigger": "",
+      "source": "interaction",
+      "memory_id": "14494a33-4b58-48c8-9d02-9a4fd0ac69fe"
+    }
+  ],
+  "relationships": {},
+  "patterns": {},
+  "empathy": {}
+}

@@ -1,0 +1,32 @@
+{
+  "content": {
+    "user_message": "What's your favorite movie?",
+    "ai_response": "I love sci-fi movies like Blade Runner and The Matrix!",
+    "context": "casual conversation"
+  },
+  "content_type": "structured",
+  "embedding": null,
+  "metadata": {
+    "memory_id": "24cb0ba4-c5fe-4a48-9300-32962fb196d0",
+    "memory_type": "MemoryType.EPISODIC",
+    "timestamp": "2026-05-06 19:35:01.217865",
+    "importance": 0.5,
+    "confidence": 0.8,
+    "source": "conversation",
+    "context": {},
+    "emotional_context": {
+      "user_excited": 0.7,
+      "ai_enthusiastic": 0.8
+    },
+    "relationships": [],
+    "tags": [
+      "movies",
+      "conversation",
+      "personal"
+    ],
+    "decay_rate": 0.08333333333333334,
+    "access_count": 0,
+    "last_accessed": null,
+    "consolidation_count": 0
+  }
+}

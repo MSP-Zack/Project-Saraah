@@ -1,0 +1,23 @@
+{
+  "memory_id": "224846e7-58fd-4a02-bbbb-b3245e99de3e",
+  "content": {
+    "skill": {
+      "name": "movie_recommendation",
+      "description": "Recommend movies based on user preferences",
+      "category": "recommendation",
+      "proficiency": 0.8
+    }
+  },
+  "content_type": "structured",
+  "metadata": {
+    "importance": 0.5,
+    "source": "learning",
+    "context": {},
+    "emotional_context": {},
+    "tags": [
+      "skill",
+      "recommendation"
+    ],
+    "timestamp": "2026-05-06T19:44:55.268259"
+  }
+}

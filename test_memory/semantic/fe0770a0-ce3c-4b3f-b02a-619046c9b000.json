@@ -1,0 +1,23 @@
+{
+  "memory_id": "fe0770a0-ce3c-4b3f-b02a-619046c9b000",
+  "content": {
+    "fact": {
+      "content": "User enjoys sci-fi movies",
+      "category": "entertainment",
+      "confidence": 0.9
+    }
+  },
+  "content_type": "structured",
+  "metadata": {
+    "importance": 0.7,
+    "source": "learning",
+    "context": {},
+    "emotional_context": {},
+    "tags": [
+      "preference",
+      "movies",
+      "sci-fi"
+    ],
+    "timestamp": "2026-05-06T19:42:03.440974"
+  }
+}

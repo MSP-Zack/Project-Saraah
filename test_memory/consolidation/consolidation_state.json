@@ -1,0 +1,24 @@
+{
+  "consolidation_history": [],
+  "memory_access_patterns": {},
+  "memory_strength": {},
+  "consolidation_rules": {
+    "episodic_to_semantic": {
+      "min_access_count": 3,
+      "min_age_days": 7,
+      "similarity_threshold": 0.7,
+      "importance_threshold": 0.6
+    },
+    "strengthening": {
+      "access_boost": 0.1,
+      "max_strength": 1.0,
+      "decay_rate": 0.001
+    },
+    "decay": {
+      "working_memory_decay": 0.1,
+      "episodic_decay": 0.01,
+      "semantic_decay": 0.001,
+      "procedural_decay": -0.001
+    }
+  }
+}

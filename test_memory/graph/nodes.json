@@ -1,0 +1,712 @@
+{
+  "79fb0c33-e6c3-4519-b324-7c1a49024c5f": {
+    "memory_type": "working",
+    "importance": 0.7,
+    "source": "conversation",
+    "tags": [
+      "query",
+      "movies"
+    ],
+    "timestamp": "2026-05-06T19:35:01.209763"
+  },
+  "24cb0ba4-c5fe-4a48-9300-32962fb196d0": {
+    "memory_type": "episodic",
+    "importance": 0.5,
+    "source": "conversation",
+    "tags": [
+      "movies",
+      "conversation",
+      "personal"
+    ],
+    "timestamp": "2026-05-06T19:35:01.217865"
+  },
+  "71aefb92-361f-4f0a-825a-b53e2d0c4474": {
+    "memory_type": "working",
+    "importance": 0.7,
+    "source": "conversation",
+    "tags": [
+      "query",
+      "movies"
+    ],
+    "timestamp": "2026-05-06T19:39:15.793624"
+  },
+  "24e1aba9-203a-4505-b5e8-45d1826b586f": {
+    "memory_type": "episodic",
+    "importance": 0.5,
+    "source": "conversation",
+    "tags": [
+      "movies",
+      "conversation",
+      "personal"
+    ],
+    "timestamp": "2026-05-06T19:39:15.810281"
+  },
+  "80c163cd-8194-4a62-ab6d-6709e1151720": {
+    "memory_type": "working",
+    "importance": 0.7,
+    "source": "conversation",
+    "tags": [
+      "query",
+      "movies"
+    ],
+    "timestamp": "2026-05-06T19:39:50.879929"
+  },
+  "e61705f5-a62c-414c-978c-bd92a101069c": {
+    "memory_type": "episodic",
+    "importance": 0.5,
+    "source": "conversation",
+    "tags": [
+      "movies",
+      "conversation",
+      "personal"
+    ],
+    "timestamp": "2026-05-06T19:39:50.887713"
+  },
+  "e040b430-e19b-4ea9-a19e-df5252883f8f": {
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "source": "learning",
+    "tags": [
+      "preference",
+      "movies",
+      "sci-fi"
+    ],
+    "timestamp": "2026-05-06T19:39:50.889469"
+  },
+  "39cbd291-f762-4d8a-83bc-106b736ac717": {
+    "memory_type": "working",
+    "importance": 0.7,
+    "source": "conversation",
+    "tags": [
+      "query",
+      "movies"
+    ],
+    "timestamp": "2026-05-06T19:39:59.788561"
+  },
+  "79fea9e9-c491-4a1e-9c74-16506bd2f71f": {
+    "memory_type": "episodic",
+    "importance": 0.5,
+    "source": "conversation",
+    "tags": [
+      "movies",
+      "conversation",
+      "personal"
+    ],
+    "timestamp": "2026-05-06T19:39:59.798052"
+  },
+  "0bacbf5d-0edc-4aa0-bb9e-ba49e4b01540": {
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "source": "learning",
+    "tags": [
+      "preference",
+      "movies",
+      "sci-fi"
+    ],
+    "timestamp": "2026-05-06T19:39:59.798653"
+  },
+  "90b49a87-2e6a-4a9c-b07b-a834f11251e6": {
+    "memory_type": "working",
+    "importance": 0.7,
+    "source": "conversation",
+    "tags": [
+      "query",
+      "movies"
+    ],
+    "timestamp": "2026-05-06T19:42:03.431226"
+  },
+  "61177f0f-7972-4192-aeaf-efc9000abd02": {
+    "memory_type": "episodic",
+    "importance": 0.5,
+    "source": "conversation",
+    "tags": [
+      "movies",
+      "conversation",
+      "personal"
+    ],
+    "timestamp": "2026-05-06T19:42:03.440423"
+  },
+  "fe0770a0-ce3c-4b3f-b02a-619046c9b000": {
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "source": "learning",
+    "tags": [
+      "preference",
+      "movies",
+      "sci-fi"
+    ],
+    "timestamp": "2026-05-06T19:42:03.440974"
+  },
+  "b62b49e8-118e-433f-9d32-580906bd3843": {
+    "memory_type": "procedural",
+    "importance": 0.5,
+    "source": "learning",
+    "tags": [
+      "skill",
+      "recommendation"
+    ],
+    "timestamp": "2026-05-06T19:42:03.441306"
+  },
+  "af2407f6-1450-4e4d-81af-c7598dcdaa54": {
+    "memory_type": "working",
+    "importance": 0.7,
+    "source": "conversation",
+    "tags": [
+      "query",
+      "movies"
+    ],
+    "timestamp": "2026-05-06T19:42:07.534974"
+  },
+  "92092fdf-c811-442e-a6b3-4ad199f56afd": {
+    "memory_type": "episodic",
+    "importance": 0.5,
+    "source": "conversation",
+    "tags": [
+      "movies",
+      "conversation",
+      "personal"
+    ],
+    "timestamp": "2026-05-06T19:42:07.545706"
+  },
+  "521e2922-783a-4f81-895c-f539e902c9a3": {
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "source": "learning",
+    "tags": [
+      "preference",
+      "movies",
+      "sci-fi"
+    ],
+    "timestamp": "2026-05-06T19:42:07.546649"
+  },
+  "e46eee0e-0b49-49f8-9b80-58916f62581d": {
+    "memory_type": "procedural",
+    "importance": 0.5,
+    "source": "learning",
+    "tags": [
+      "skill",
+      "recommendation"
+    ],
+    "timestamp": "2026-05-06T19:42:07.547388"
+  },
+  "1848f6ca-e730-4e05-ba65-8804cb6cdb9f": {
+    "memory_type": "working",
+    "importance": 0.7,
+    "source": "conversation",
+    "tags": [
+      "query",
+      "movies"
+    ],
+    "timestamp": "2026-05-06T19:42:16.868794"
+  },
+  "6ef9ce7b-da32-4ea1-a136-9af85ad8e475": {
+    "memory_type": "episodic",
+    "importance": 0.5,
+    "source": "conversation",
+    "tags": [
+      "movies",
+      "conversation",
+      "personal"
+    ],
+    "timestamp": "2026-05-06T19:42:16.884254"
+  },
+  "391992a1-1739-4699-939b-633ad2d3d541": {
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "source": "learning",
+    "tags": [
+      "preference",
+      "movies",
+      "sci-fi"
+    ],
+    "timestamp": "2026-05-06T19:42:16.885004"
+  },
+  "37a69cda-76d3-4127-9baf-79a53727e899": {
+    "memory_type": "procedural",
+    "importance": 0.5,
+    "source": "learning",
+    "tags": [
+      "skill",
+      "recommendation"
+    ],
+    "timestamp": "2026-05-06T19:42:16.885581"
+  },
+  "806f9ba1-ba2e-49bd-bbcb-1e5e5b47c8dc": {
+    "memory_type": "emotional",
+    "importance": 0.5,
+    "source": "interaction",
+    "tags": [
+      "emotion",
+      "positive"
+    ],
+    "timestamp": "2026-05-06T19:42:16.886112"
+  },
+  "a75a782d-336f-4147-b003-98bfce79c466": {
+    "memory_type": "working",
+    "importance": 0.7,
+    "source": "conversation",
+    "tags": [
+      "query",
+      "movies"
+    ],
+    "timestamp": "2026-05-06T19:42:28.340666"
+  },
+  "ef324643-fb98-4b2c-af46-7635f0bd9d66": {
+    "memory_type": "episodic",
+    "importance": 0.5,
+    "source": "conversation",
+    "tags": [
+      "movies",
+      "conversation",
+      "personal"
+    ],
+    "timestamp": "2026-05-06T19:42:28.350160"
+  },
+  "c1f093ba-1877-4c0b-9757-b4d9c5d87014": {
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "source": "learning",
+    "tags": [
+      "preference",
+      "movies",
+      "sci-fi"
+    ],
+    "timestamp": "2026-05-06T19:42:28.350756"
+  },
+  "f27a9f01-6c1b-49ea-94cd-0212418da653": {
+    "memory_type": "procedural",
+    "importance": 0.5,
+    "source": "learning",
+    "tags": [
+      "skill",
+      "recommendation"
+    ],
+    "timestamp": "2026-05-06T19:42:28.351046"
+  },
+  "87cc1e8f-3f5b-4514-9f33-cd0b382a5bef": {
+    "memory_type": "emotional",
+    "importance": 0.5,
+    "source": "interaction",
+    "tags": [
+      "emotion",
+      "positive"
+    ],
+    "timestamp": "2026-05-06T19:42:28.351380"
+  },
+  "1a494bbb-15a3-464a-a3f5-a02e5f5a9553": {
+    "memory_type": "working",
+    "importance": 0.7,
+    "source": "conversation",
+    "tags": [
+      "query",
+      "movies"
+    ],
+    "timestamp": "2026-05-06T19:42:55.168585"
+  },
+  "b106874a-1d23-46bc-afcb-5dd96ecd474a": {
+    "memory_type": "episodic",
+    "importance": 0.5,
+    "source": "conversation",
+    "tags": [
+      "movies",
+      "conversation",
+      "personal"
+    ],
+    "timestamp": "2026-05-06T19:42:55.189896"
+  },
+  "21b7c7ec-bfa8-473e-a547-6973dfe9130c": {
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "source": "learning",
+    "tags": [
+      "preference",
+      "movies",
+      "sci-fi"
+    ],
+    "timestamp": "2026-05-06T19:42:55.190581"
+  },
+  "f30fcc77-06d3-4edb-90a2-c8b3783d84d4": {
+    "memory_type": "procedural",
+    "importance": 0.5,
+    "source": "learning",
+    "tags": [
+      "skill",
+      "recommendation"
+    ],
+    "timestamp": "2026-05-06T19:42:55.191044"
+  },
+  "89494675-3c70-4e1d-9dab-f9618379249f": {
+    "memory_type": "emotional",
+    "importance": 0.5,
+    "source": "interaction",
+    "tags": [
+      "emotion",
+      "positive"
+    ],
+    "timestamp": "2026-05-06T19:42:55.191527"
+  },
+  "4f9f58ef-9ec5-48f6-a8a5-c41814cdecbd": {
+    "memory_type": "working",
+    "importance": 0.7,
+    "source": "conversation",
+    "tags": [
+      "query",
+      "movies"
+    ],
+    "timestamp": "2026-05-06T19:43:12.874427"
+  },
+  "c7900f08-8276-4af2-b7b3-b891e8b7798b": {
+    "memory_type": "episodic",
+    "importance": 0.5,
+    "source": "conversation",
+    "tags": [
+      "movies",
+      "conversation",
+      "personal"
+    ],
+    "timestamp": "2026-05-06T19:43:12.885113"
+  },
+  "4b18243b-ed16-4abd-bbc2-dd8291add788": {
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "source": "learning",
+    "tags": [
+      "preference",
+      "movies",
+      "sci-fi"
+    ],
+    "timestamp": "2026-05-06T19:43:12.885636"
+  },
+  "61131220-4831-4d52-a128-cc938bc67c6c": {
+    "memory_type": "procedural",
+    "importance": 0.5,
+    "source": "learning",
+    "tags": [
+      "skill",
+      "recommendation"
+    ],
+    "timestamp": "2026-05-06T19:43:12.885957"
+  },
+  "515aae4f-fdcb-43f4-87bc-14012c810946": {
+    "memory_type": "emotional",
+    "importance": 0.5,
+    "source": "interaction",
+    "tags": [
+      "emotion",
+      "positive"
+    ],
+    "timestamp": "2026-05-06T19:43:12.886289"
+  },
+  "9f41e15c-9a79-4cbd-9630-4cc85483a0ec": {
+    "memory_type": "working",
+    "importance": 0.7,
+    "source": "conversation",
+    "tags": [
+      "query",
+      "movies"
+    ],
+    "timestamp": "2026-05-06T19:43:45.562458"
+  },
+  "7c81a52d-8cc8-4561-b157-0fbf41dfed70": {
+    "memory_type": "episodic",
+    "importance": 0.5,
+    "source": "conversation",
+    "tags": [
+      "movies",
+      "conversation",
+      "personal"
+    ],
+    "timestamp": "2026-05-06T19:43:45.572600"
+  },
+  "db8349f4-f775-4e4f-9030-2af993e7aa41": {
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "source": "learning",
+    "tags": [
+      "preference",
+      "movies",
+      "sci-fi"
+    ],
+    "timestamp": "2026-05-06T19:43:45.573154"
+  },
+  "b60a74c6-892a-4459-b9e6-e33060433ed4": {
+    "memory_type": "procedural",
+    "importance": 0.5,
+    "source": "learning",
+    "tags": [
+      "skill",
+      "recommendation"
+    ],
+    "timestamp": "2026-05-06T19:43:45.573484"
+  },
+  "ef8012d0-92b6-4032-b9b9-167ff3907404": {
+    "memory_type": "emotional",
+    "importance": 0.5,
+    "source": "interaction",
+    "tags": [
+      "emotion",
+      "positive"
+    ],
+    "timestamp": "2026-05-06T19:43:45.573785"
+  },
+  "f5ef7937-b98e-46a5-be97-5ebd4f25071c": {
+    "memory_type": "working",
+    "importance": 0.7,
+    "source": "conversation",
+    "tags": [
+      "query",
+      "movies"
+    ],
+    "timestamp": "2026-05-06T19:44:48.512947"
+  },
+  "06add722-a77c-4990-a17d-1d0992cadd5c": {
+    "memory_type": "episodic",
+    "importance": 0.5,
+    "source": "conversation",
+    "tags": [
+      "movies",
+      "conversation",
+      "personal"
+    ],
+    "timestamp": "2026-05-06T19:44:48.522829"
+  },
+  "ccc01a51-eb89-4150-9cd4-31ff95d89233": {
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "source": "learning",
+    "tags": [
+      "preference",
+      "movies",
+      "sci-fi"
+    ],
+    "timestamp": "2026-05-06T19:44:48.523366"
+  },
+  "38cc5029-5783-448c-bff6-6b4d3c78128d": {
+    "memory_type": "procedural",
+    "importance": 0.5,
+    "source": "learning",
+    "tags": [
+      "skill",
+      "recommendation"
+    ],
+    "timestamp": "2026-05-06T19:44:48.523712"
+  },
+  "f49c0efc-69a8-464a-8226-282a73214d2e": {
+    "memory_type": "emotional",
+    "importance": 0.5,
+    "source": "interaction",
+    "tags": [
+      "emotion",
+      "positive"
+    ],
+    "timestamp": "2026-05-06T19:44:48.524053"
+  },
+  "f1df92ce-5368-4728-ba7d-6c780db10b6f": {
+    "memory_type": "working",
+    "importance": 0.7,
+    "source": "conversation",
+    "tags": [
+      "query",
+      "movies"
+    ],
+    "timestamp": "2026-05-06T19:44:55.255958"
+  },
+  "521f56e3-550a-4461-8c7f-1a4ba36a30fe": {
+    "memory_type": "episodic",
+    "importance": 0.5,
+    "source": "conversation",
+    "tags": [
+      "movies",
+      "conversation",
+      "personal"
+    ],
+    "timestamp": "2026-05-06T19:44:55.267003"
+  },
+  "0b9b238d-da49-43b2-9802-352971603bb5": {
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "source": "learning",
+    "tags": [
+      "preference",
+      "movies",
+      "sci-fi"
+    ],
+    "timestamp": "2026-05-06T19:44:55.267774"
+  },
+  "224846e7-58fd-4a02-bbbb-b3245e99de3e": {
+    "memory_type": "procedural",
+    "importance": 0.5,
+    "source": "learning",
+    "tags": [
+      "skill",
+      "recommendation"
+    ],
+    "timestamp": "2026-05-06T19:44:55.268259"
+  },
+  "c8b67c87-619d-4801-8cd6-b13bd595c024": {
+    "memory_type": "emotional",
+    "importance": 0.5,
+    "source": "interaction",
+    "tags": [
+      "emotion",
+      "positive"
+    ],
+    "timestamp": "2026-05-06T19:44:55.268708"
+  },
+  "e921fbe1-9470-41ce-a816-64931f410a2d": {
+    "memory_type": "working",
+    "importance": 0.7,
+    "source": "conversation",
+    "tags": [
+      "query",
+      "movies"
+    ],
+    "timestamp": "2026-05-06T19:45:03.324863"
+  },
+  "294ed890-c904-4dba-a969-edfb1b3433c4": {
+    "memory_type": "episodic",
+    "importance": 0.5,
+    "source": "conversation",
+    "tags": [
+      "movies",
+      "conversation",
+      "personal"
+    ],
+    "timestamp": "2026-05-06T19:45:03.335174"
+  },
+  "bebbed80-5de4-408f-b7d7-dd97f5b77353": {
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "source": "learning",
+    "tags": [
+      "preference",
+      "movies",
+      "sci-fi"
+    ],
+    "timestamp": "2026-05-06T19:45:03.335752"
+  },
+  "5cd10d17-9ee1-404f-b162-58660b7ac27e": {
+    "memory_type": "procedural",
+    "importance": 0.5,
+    "source": "learning",
+    "tags": [
+      "skill",
+      "recommendation"
+    ],
+    "timestamp": "2026-05-06T19:45:03.336076"
+  },
+  "adc20cf0-1826-4fb9-ae36-1cec67865800": {
+    "memory_type": "emotional",
+    "importance": 0.5,
+    "source": "interaction",
+    "tags": [
+      "emotion",
+      "positive"
+    ],
+    "timestamp": "2026-05-06T19:45:03.336402"
+  },
+  "f25cf73d-f0b0-4a65-a539-cad5d327e00f": {
+    "memory_type": "working",
+    "importance": 0.7,
+    "source": "conversation",
+    "tags": [
+      "query",
+      "movies"
+    ],
+    "timestamp": "2026-05-06T19:45:05.866131"
+  },
+  "67e4975f-5021-44dd-8720-55cb07591533": {
+    "memory_type": "episodic",
+    "importance": 0.5,
+    "source": "conversation",
+    "tags": [
+      "movies",
+      "conversation",
+      "personal"
+    ],
+    "timestamp": "2026-05-06T19:45:05.876668"
+  },
+  "b5571354-d1a9-49b9-ad60-a2159df7de15": {
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "source": "learning",
+    "tags": [
+      "preference",
+      "movies",
+      "sci-fi"
+    ],
+    "timestamp": "2026-05-06T19:45:05.877378"
+  },
+  "b92e3af2-f9d3-4a22-9bc9-e4f44cf8884e": {
+    "memory_type": "procedural",
+    "importance": 0.5,
+    "source": "learning",
+    "tags": [
+      "skill",
+      "recommendation"
+    ],
+    "timestamp": "2026-05-06T19:45:05.877692"
+  },
+  "32a7310c-7b7d-44d7-b231-6345c98ea186": {
+    "memory_type": "emotional",
+    "importance": 0.5,
+    "source": "interaction",
+    "tags": [
+      "emotion",
+      "positive"
+    ],
+    "timestamp": "2026-05-06T19:45:05.877983"
+  },
+  "ca2d0eaa-62b9-4e01-9697-bbcadc10c664": {
+    "memory_type": "working",
+    "importance": 0.7,
+    "source": "conversation",
+    "tags": [
+      "query",
+      "movies"
+    ],
+    "timestamp": "2026-05-06T19:45:10.889546"
+  },
+  "27b1bdf2-93a1-41f6-b261-789efac0466a": {
+    "memory_type": "episodic",
+    "importance": 0.5,
+    "source": "conversation",
+    "tags": [
+      "movies",
+      "conversation",
+      "personal"
+    ],
+    "timestamp": "2026-05-06T19:45:10.903199"
+  },
+  "e36e3408-89fb-4dd5-87ab-e3883a3bfb7d": {
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "source": "learning",
+    "tags": [
+      "preference",
+      "movies",
+      "sci-fi"
+    ],
+    "timestamp": "2026-05-06T19:45:10.903687"
+  },
+  "3d4e345f-f51b-4f8f-80e3-d4b38c5293b4": {
+    "memory_type": "procedural",
+    "importance": 0.5,
+    "source": "learning",
+    "tags": [
+      "skill",
+      "recommendation"
+    ],
+    "timestamp": "2026-05-06T19:45:10.903908"
+  },
+  "14494a33-4b58-48c8-9d02-9a4fd0ac69fe": {
+    "memory_type": "emotional",
+    "importance": 0.5,
+    "source": "interaction",
+    "tags": [
+      "emotion",
+      "positive"
+    ],
+    "timestamp": "2026-05-06T19:45:10.904467"
+  }
+}
