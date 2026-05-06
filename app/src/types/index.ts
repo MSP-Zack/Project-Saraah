@@ -66,6 +66,10 @@ export interface ChessBoardState {
   winner: string | null;
   is_draw: boolean;
   valid_moves: ChessMove[];
+  difficulty?: string;
+  player_rating?: number;
+  match_id?: string;
+  chess_stats?: Record<string, any>;
 }
 
 export interface PetState {

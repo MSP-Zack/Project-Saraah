@@ -111,6 +111,13 @@ export function useWebSocket() {
       if (data.result?.state) {
         store.setPetState(data.result.state as PetState);
       }
+    } else if (data.action === 'pet_move') {
+      // Forward movement instruction to the VRM viewer via DOM event
+      try {
+        window.dispatchEvent(new CustomEvent('pet-move', { detail: data.detail }));
+      } catch (e) {
+        console.warn('pet_move event dispatch failed', e);
+      }
     } else if (data.action === 'editor_update') {
       if (data.result?.document) {
         store.setActiveDocument(data.result.document);

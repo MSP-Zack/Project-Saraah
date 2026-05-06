@@ -14,6 +14,7 @@ from typing import Optional, Dict, Any
 import uuid
 import shutil
 import time
+import random
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, File, UploadFile, Form
 from fastapi.staticfiles import StaticFiles
@@ -160,7 +161,17 @@ def initialize():
     plugin_manager = PluginManager()
     # Auto-load plugins
     plugin_manager.load_plugin("chess_game")
+    # Prefer v2 plugins when available
+    try:
+        plugin_manager.load_plugin("chess_v2")
+    except Exception:
+        pass
     plugin_manager.load_plugin("tamagotchi_pet")
+    # Also load v2 plugin if present
+    try:
+        plugin_manager.load_plugin("tamagotchi_v2")
+    except Exception:
+        pass
     plugin_manager.load_plugin("collab_editor")
     plugin_manager.load_plugin("image_generation")
     print(f"[INIT]: Plugins loaded - {plugin_manager.list_plugins()}")
@@ -779,34 +790,308 @@ def get_monitors():
 
 # ========== CHESS ENDPOINTS ==========
 @app.post("/api/chess/new")
-def chess_new():
+def chess_new(difficulty: str = "normal"):
     if plugin_manager:
-        plugin = plugin_manager.get_plugin("chess_game")
+        plugin = plugin_manager.get_plugin("chess_v2") or plugin_manager.get_plugin("chess_game")
         if plugin:
-            return plugin.new_game()
+            try:
+                res = plugin.new_game(difficulty) if hasattr(plugin, "new_game") else plugin.new_game()
+            except TypeError:
+                res = plugin.new_game()
+
+            board_payload = res if isinstance(res, dict) and res.get("board") else {"board": res}
+            try:
+                asyncio.create_task(broadcast_message({"action": "chess_update", "result": board_payload}))
+            except Exception:
+                pass
+
+            # Ask Sarah to introduce herself as the opponent for this match
+            try:
+                async def _intro_task(diff: str):
+                    if not sarah_brain:
+                        return
+                    try:
+                        prompt = (
+                            f"You are Sarah, a friendly chess opponent. The match difficulty is {diff}. "
+                            "Introduce yourself in one short sentence and wish the player good luck. "
+                            "Optionally include a short action tag like [EXPRESSION: confident]."
+                        )
+                        resp = await sarah_brain.generate_response(prompt)
+                        await broadcast_message({"action": "reply", "text": resp.get("text", ""), "actions": resp.get("actions", [])})
+                    except Exception:
+                        pass
+
+                diff = res.get('difficulty') if isinstance(res, dict) else difficulty
+                asyncio.create_task(_intro_task(diff))
+            except Exception:
+                pass
+
+            return board_payload
     return {"success": False, "error": "Chess plugin not loaded"}
 
 @app.get("/api/chess/board")
 def chess_board():
     if plugin_manager:
-        plugin = plugin_manager.get_plugin("chess_game")
+        plugin = plugin_manager.get_plugin("chess_v2") or plugin_manager.get_plugin("chess_game")
         if plugin:
-            return plugin.get_board()
+            res = plugin.get_board()
+            return res if isinstance(res, dict) and res.get("board") else {"board": res}
     return {"success": False, "error": "Chess plugin not loaded"}
+
+
+@app.post("/api/chess/analyze")
+async def chess_analyze(data: dict = None):
+    """Ask Sarah (LLM) to analyze a finished match or current moves.
+
+    Accepts optional `match_id` or `pgn` in the request body. If none provided,
+    tries to use the latest finished match from `chess_v2`.
+    """
+    if not plugin_manager or not sarah_brain:
+        return {"success": False, "error": "Server not ready"}
+
+    data = data or {}
+    plugin = plugin_manager.get_plugin("chess_v2") or plugin_manager.get_plugin("chess_game")
+    if not plugin:
+        return {"success": False, "error": "Chess plugin not loaded"}
+
+    match_id = data.get("match_id")
+    pgn = data.get("pgn")
+    if not pgn:
+        # try to export from plugin
+        try:
+            if hasattr(plugin, "export_pgn"):
+                pgn = plugin.export_pgn(match_id)
+        except Exception:
+            pgn = None
+
+    if not pgn:
+        return {"success": False, "error": "No PGN available to analyze"}
+
+    prompt = (
+        "CHESS POST-GAME ANALYSIS:\nYou are Sarah, an experienced chess coach. Given the following PGN/move list, "
+        "provide a short analysis highlighting the turning points, one key mistake by the player (if any), "
+        "and a suggested training drill to improve. Keep it concise (3-5 sentences).\n\n"
+        f"PGN:\n{pgn}\n\nRespond as plain text."
+    )
+
+    try:
+        resp = await sarah_brain.generate_response(prompt)
+        # broadcast as normal reply
+        await broadcast_message({"action": "reply", "text": resp.get("text", ""), "actions": resp.get("actions", [])})
+        return {"success": True, "analysis": resp}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/chess/stats")
+def chess_stats():
+    if not plugin_manager:
+        return {"success": False, "error": "Chess plugin not loaded"}
+    plugin = plugin_manager.get_plugin("chess_v2") or plugin_manager.get_plugin("chess_game")
+    if not plugin:
+        return {"success": False, "error": "Chess plugin not loaded"}
+
+    if hasattr(plugin, "get_stats"):
+        return plugin.get_stats()
+    return {"stats": {}}
+
+@app.get("/api/chess/history")
+def chess_history():
+    if not plugin_manager:
+        return {"success": False, "error": "Chess plugin not loaded"}
+    plugin = plugin_manager.get_plugin("chess_v2") or plugin_manager.get_plugin("chess_game")
+    if not plugin:
+        return {"success": False, "error": "Chess plugin not loaded"}
+
+    if hasattr(plugin, "get_history"):
+        return plugin.get_history()
+    return {"history": []}
 
 @app.post("/api/chess/move")
 def chess_move(from_row: int, from_col: int, to_row: int, to_col: int):
     if plugin_manager:
-        plugin = plugin_manager.get_plugin("chess_game")
+        plugin = plugin_manager.get_plugin("chess_v2") or plugin_manager.get_plugin("chess_game")
         if plugin:
-            return plugin.make_move(from_row, from_col, to_row, to_col)
+            # Support optional LLM-driven AI mode: do not auto-run engine move if runtime requests LLM move selection
+            llm_mode = runtime_state.get("chess_llm_mode", "commentary")
+            if llm_mode == 'llm_player':
+                # apply player's move but suppress automatic AI response
+                result = plugin.make_move(from_row, from_col, to_row, to_col, auto_ai=False)
+            else:
+                result = plugin.make_move(from_row, from_col, to_row, to_col)
+
+            # Normalize older plugin responses into the v2 wrapper shape
+            if isinstance(result, dict) and not result.get("player_move") and result.get("board"):
+                result = {"player_move": result, "board": result["board"]}
+
+            # If the match just ended, record a short memory entry for Sarah
+            try:
+                if memory_engine and isinstance(result, dict):
+                    # detect end conditions
+                    game_over = False
+                    winner = None
+                    if result.get("player_move") and isinstance(result.get("player_move"), dict):
+                        if result["player_move"].get("game_over"):
+                            game_over = True
+                            winner = result["player_move"].get("winner")
+                    if result.get("game_over"):
+                        game_over = True
+                        winner = result.get("winner")
+
+                    # also check ai_move wrapper
+                    if result.get("ai_move") and isinstance(result.get("ai_move"), dict) and result["ai_move"].get("game_over"):
+                        game_over = True
+                        winner = result["ai_move"].get("winner")
+
+                    if game_over:
+                        title = "Chess match finished"
+                        content = f"A chess match ended. Winner: {winner}. Moves: {len(result.get('board', {}).get('move_history', []) if isinstance(result.get('board'), dict) else 0)}"
+                        memory_engine.add_memory(title, content, importance=6)
+            except Exception:
+                pass
+
+            try:
+                asyncio.create_task(broadcast_message({"action": "chess_update", "result": result}))
+            except Exception:
+                pass
+            # Schedule LLM commentary asynchronously (hybrid: engine picks move, Sarah comments)
+            try:
+                async def _chess_commentary_task(res):
+                    if not sarah_brain:
+                        return
+                    try:
+                        # Build a concise prompt summarizing the latest moves
+                        player_move = None
+                        ai_move = None
+                        if isinstance(res, dict):
+                            if res.get('player_move') and isinstance(res.get('player_move'), dict):
+                                player_move = res['player_move'].get('move') or res['player_move'].get('move_notation')
+                            elif res.get('move'):
+                                player_move = res.get('move')
+                            if res.get('ai_move') and isinstance(res.get('ai_move'), dict):
+                                ai_move = res['ai_move'].get('move')
+
+                        prompt = (
+                            "CHESS COMMENTARY:\nYou are Sarah, a friendly chess opponent and coach. "
+                            "Given the recent moves, provide a concise (1-2 sentence) comment explaining the AI's choice and a short practical tip for the player. "
+                            "Include in your response any suggested next move as SAN (if helpful).\n\n"
+                        )
+                        if player_move:
+                            prompt += f"Player played: {player_move}.\n"
+                        if ai_move:
+                            prompt += f"Sarah responded with: {ai_move}.\n"
+                        prompt += "Keep it short and friendly."
+
+                        resp = await sarah_brain.generate_response(prompt)
+                        await broadcast_message({"action": "reply", "text": resp.get("text", ""), "actions": resp.get("actions", [])})
+                    except Exception:
+                        pass
+
+                asyncio.create_task(_chess_commentary_task(result))
+            except Exception:
+                pass
+
+            # If LLM-driven AI mode is enabled, ask Sarah to pick a legal move and apply it
+            if runtime_state.get("chess_llm_mode") == 'llm_player':
+                try:
+                    async def _llm_choose_and_play(res):
+                        try:
+                            if not sarah_brain:
+                                return
+                            # gather legal moves from latest board state
+                            board_state = None
+                            if isinstance(res, dict):
+                                if res.get('board'):
+                                    board_state = res.get('board')
+                                elif res.get('player_move') and isinstance(res.get('player_move'), dict):
+                                    board_state = res.get('board')
+                            if not board_state:
+                                return
+                            legal = board_state.get('valid_moves', [])
+                            if not legal:
+                                return
+
+                            # convert to UCI-like strings for prompt
+                            def to_uci(m):
+                                files = 'abcdefgh'
+                                fr = m['from']
+                                to = m['to']
+                                f1 = files[fr['col']]
+                                r1 = str(8 - fr['row'])
+                                f2 = files[to['col']]
+                                r2 = str(8 - to['row'])
+                                return f"{f1}{r1}{f2}{r2}"
+
+                            uci_moves = [to_uci(m) for m in legal]
+
+                            prompt = (
+                                "CHESS MOVE CHOICE:\nYou are Sarah. Choose one legal move from the list provided. "
+                                "Return only the move in UCI format (e.g., e7e5). Do not add explanation.\n\n"
+                                f"Legal moves: {', '.join(uci_moves)}\n\nRespond with one move only."
+                            )
+
+                            resp = await sarah_brain.generate_response(prompt)
+                            text = (resp.get('text') or '').strip()
+                            # extract move token
+                            import re
+                            m = re.search(r'([a-h][1-8][a-h][1-8])', text)
+                            if not m:
+                                return
+                            chosen = m.group(1)
+                            # find matching legal move and convert to indices
+                            target = None
+                            for mv in legal:
+                                if to_uci(mv) == chosen:
+                                    target = mv
+                                    break
+                            if not target:
+                                return
+
+                            fr = target['from']
+                            to = target['to']
+                            # Apply AI move (as a move from 'black')
+                            ai_res = plugin.make_move(fr['row'], fr['col'], to['row'], to['col'], auto_ai=False)
+                            try:
+                                await broadcast_message({"action": "chess_update", "result": ai_res})
+                            except Exception:
+                                pass
+                        except Exception:
+                            pass
+
+                    asyncio.create_task(_llm_choose_and_play(result))
+                except Exception:
+                    pass
+
+            return result
     return {"success": False, "error": "Chess plugin not loaded"}
 
 # ========== PET ENDPOINTS ==========
+def map_pet_action_to_vrm(action: str) -> dict:
+    """Map pet actions to VRM animation/expression payloads for broadcasting.
+
+    Returns a dict suitable to merge into a {'action': 'vrm_reaction', ...}
+    or an empty dict/None when no mapping is defined.
+    """
+    if not action:
+        return None
+    m = {
+        "feed": {"expression": "happy", "animation": "clap"},
+        "pet": {"expression": "happy", "animation": "hug"},
+        "play": {"expression": "happy", "animation": "dance"},
+        "clean": {"expression": "relaxed", "animation": "nod"},
+        "sleep": {"expression": "relaxed", "animation": "sleep"},
+        "wake_up": {"expression": "surprised", "animation": "nod"},
+        "medicate": {"expression": "relaxed", "animation": "nod"},
+        "sarah_interact": {"expression": "surprised", "animation": "wave"},
+        "seek_food": {"expression": "surprised", "animation": "wave"},
+        "interact_with_sarah": {"expression": "happy", "animation": "wave"},
+        "groom": {"expression": "relaxed", "animation": "clap"},
+    }
+    return m.get(action)
 @app.get("/api/pet/state")
 def pet_state():
     if plugin_manager:
-        plugin = plugin_manager.get_plugin("tamagotchi_pet")
+        # prefer v2 if available
+        plugin = plugin_manager.get_plugin("tamagotchi_v2") or plugin_manager.get_plugin("tamagotchi_pet")
         if plugin:
             return plugin.get_state()
     return {"success": False, "error": "Pet plugin not loaded"}
@@ -814,19 +1099,152 @@ def pet_state():
 @app.post("/api/pet/{action}")
 def pet_action(action: str, data: dict = None):
     if plugin_manager:
-        plugin = plugin_manager.get_plugin("tamagotchi_pet")
+        plugin = plugin_manager.get_plugin("tamagotchi_v2") or plugin_manager.get_plugin("tamagotchi_pet")
         if plugin:
             data = data or {}
             method = getattr(plugin, action, None)
             if method:
+                # Call the plugin method and capture the result so we can broadcast
                 if action in ["feed", "play"]:
-                    return method(data.get("type", "regular"))
+                    res = method(data.get("type", "regular"))
                 elif action == "rename":
-                    return method(data.get("name", "Pixel"))
+                    res = method(data.get("name", "Pixel"))
                 elif action == "sarah_interact":
-                    return method(data.get("action", "pet"))
-                return method()
+                    res = method(data.get("action", "pet"))
+                else:
+                    res = method()
+
+                # Broadcast updated pet state and a VRM reaction asynchronously
+                try:
+                    state = res.get("state") if isinstance(res, dict) else None
+                    if state:
+                        asyncio.create_task(broadcast_message({"action": "pet_update", "result": {"state": state}}))
+
+                    vrm_msg = map_pet_action_to_vrm(action)
+                    if vrm_msg:
+                        asyncio.create_task(broadcast_message({"action": "vrm_reaction", **vrm_msg}))
+                except Exception:
+                    pass
+
+                # Record the interaction in memory so Sarah can recall it later
+                try:
+                    if memory_engine:
+                        pet_name = (state or {}).get("name") if isinstance(state, dict) else None
+                        title = f"Pet action: {action}"
+                        content = f"Action '{action}' performed on pet {pet_name or ''}. Result: {res.get('message')}."
+                        memory_engine.add_memory(title, content, importance=5)
+                except Exception:
+                    pass
+
+                return res
     return {"success": False, "error": "Action not available"}
+
+
+@app.post("/api/pet/autonomous")
+async def pet_autonomous():
+    """Trigger a single autonomous decision on the pet plugin and broadcast movement if applicable."""
+    if not plugin_manager:
+        return {"success": False, "error": "Plugin manager not initialized"}
+    plugin = plugin_manager.get_plugin("tamagotchi_v2") or plugin_manager.get_plugin("tamagotchi_pet")
+    if not plugin or not hasattr(plugin, "autonomous_action"):
+        return {"success": False, "error": "Autonomous action not available"}
+
+    try:
+        result = plugin.autonomous_action()
+        # If the autonomous action suggests wandering or seeking, broadcast a simple move
+        action = result.get("action")
+        if action in ("wander", "seek_food"):
+            # Random nearby target for demo purposes
+            tx = round(random.uniform(-2.0, 2.0), 3)
+            tz = round(random.uniform(0.5, 3.0), 3)
+            speed = 1.2
+            await broadcast_message({"action": "pet_move", "detail": {"x": tx, "y": 0, "z": tz, "speed": speed}})
+        else:
+            # For other autonomous actions, emit a VRM reaction so the avatar animates
+            vrm_msg = map_pet_action_to_vrm(action)
+            if vrm_msg:
+                await broadcast_message({"action": "vrm_reaction", **vrm_msg})
+
+        # Broadcast updated pet state when present
+        try:
+            state = None
+            # result may be shaped like {'action': ..., 'result': {'state': {...}}}
+            if isinstance(result, dict):
+                maybe = result.get("result")
+                if isinstance(maybe, dict) and maybe.get("state"):
+                    state = maybe.get("state")
+                elif result.get("state"):
+                    state = result.get("state")
+            if state:
+                await broadcast_message({"action": "pet_update", "result": {"state": state}})
+        except Exception:
+            pass
+
+        return {"success": True, "result": result}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/pet/mini-game/start")
+def mini_game_start(data: dict = None):
+    if not plugin_manager:
+        return {"success": False, "error": "Plugin manager not initialized"}
+    plugin = plugin_manager.get_plugin("tamagotchi_v2") or plugin_manager.get_plugin("tamagotchi_pet")
+    if not plugin or not hasattr(plugin, "start_minigame"):
+        return {"success": False, "error": "Mini-game not available"}
+    data = data or {}
+    try:
+        return plugin.start_minigame(data.get("game", "fetch"), data.get("difficulty", "normal"))
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/pet/mini-game/submit")
+async def mini_game_submit(data: dict = None):
+    if not plugin_manager:
+        return {"success": False, "error": "Plugin manager not initialized"}
+    plugin = plugin_manager.get_plugin("tamagotchi_v2") or plugin_manager.get_plugin("tamagotchi_pet")
+    if not plugin or not hasattr(plugin, "submit_minigame"):
+        return {"success": False, "error": "Mini-game not available"}
+    data = data or {}
+    session_id = data.get("session_id")
+    score = data.get("score")
+    try:
+        result = plugin.submit_minigame(session_id, int(score))
+        if result.get("success") and result.get("state"):
+            await broadcast_message({"action": "pet_update", "result": {"state": result.get("state")}})
+        return result
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/pet/suggest")
+async def pet_suggest():
+    """Ask Sarah (LLM) for caregiving suggestions for the pet and broadcast the reply."""
+    if not plugin_manager or not sarah_brain:
+        return {"success": False, "error": "Server not ready"}
+
+    plugin = plugin_manager.get_plugin("tamagotchi_v2") or plugin_manager.get_plugin("tamagotchi_pet")
+    if not plugin:
+        return {"success": False, "error": "Pet plugin not loaded"}
+
+    try:
+        # Prefer structured LLM context if available
+        context = plugin.get_llm_context() if hasattr(plugin, "get_llm_context") else str(plugin.get_state())
+        prompt = (
+            "PET CARE ADVISOR:\n"
+            "You are Sarah, the caregiving AI. Given the pet context below, suggest up to 3 prioritized actions the user should take. "
+            "For each suggestion provide a one-line reason. If you want Sarah to perform an animation or expression, include tags like [ACTION: wave] or [EXPRESSION: happy].\n\n"
+            f"{context}\n\nRespond concisely."
+        )
+
+        resp = await sarah_brain.generate_response(prompt)
+
+        # Broadcast the suggestion as a normal reply so clients display it
+        await broadcast_message({"action": "reply", "text": resp.get("text", ""), "actions": resp.get("actions", [])})
+        return {"success": True, "response": resp}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 # ========== COLLAB EDITOR ENDPOINTS ==========
 @app.get("/api/editor/documents")
@@ -1293,7 +1711,7 @@ async def handle_pet_action(ws: WebSocket, data: dict):
     """Handle pet-related actions."""
     action = data.get("action", "")
     if plugin_manager:
-        plugin = plugin_manager.get_plugin("tamagotchi_pet")
+        plugin = plugin_manager.get_plugin("tamagotchi_v2") or plugin_manager.get_plugin("tamagotchi_pet")
         if plugin:
             method = getattr(plugin, action, None)
             if method:
@@ -1441,6 +1859,76 @@ async def proactive_chat_loop():
             runtime_state["sarah_status"] = "idle"
             runtime_state["last_activity"] = datetime.now().isoformat()
 
+
+        async def pet_monitor():
+            """Background task that monitors pet state and asks Sarah for suggestions when needed."""
+            while True:
+                await asyncio.sleep(20)
+
+                if not runtime_state.get("proactive_mode", True):
+                    continue
+
+                if not plugin_manager or not sarah_brain:
+                    continue
+
+                plugin = plugin_manager.get_plugin("tamagotchi_v2") or plugin_manager.get_plugin("tamagotchi_pet")
+                if not plugin:
+                    continue
+
+                try:
+                    state = plugin.get_state()
+                    # Normalize needs for both v1 and v2 plugins
+                    if isinstance(state, dict) and "needs" in state:
+                        needs = state["needs"]
+                    else:
+                        needs = {
+                            "hunger": state.get("hunger", 100),
+                            "energy": state.get("energy", 100),
+                            "happiness": state.get("happiness", 100),
+                            "hygiene": state.get("hygiene", 100),
+                            "health": state.get("health", 100),
+                        }
+
+                    hungry = needs.get("hunger", 100) < 35
+                    sick = needs.get("health", 100) < 50
+                    lonely = needs.get("happiness", 100) < 40
+
+                    # Rate limit notifications
+                    last_notify = runtime_state.get("last_pet_notify")
+                    if last_notify:
+                        try:
+                            last_dt = datetime.fromisoformat(last_notify)
+                        except Exception:
+                            last_dt = None
+                    else:
+                        last_dt = None
+
+                    should_notify = False
+                    if last_dt is None:
+                        should_notify = True
+                    else:
+                        elapsed = (datetime.now() - last_dt).total_seconds()
+                        should_notify = elapsed > 90
+
+                    if should_notify and (hungry or sick or lonely):
+                        context = plugin.get_llm_context() if hasattr(plugin, "get_llm_context") else str(state)
+                        prompt = (
+                            "[SYSTEM: The pet needs attention]\n"
+                            "You are Sarah, the user's caring companion. The pet's current status is below. "
+                            "Provide 2-3 prioritized, actionable care suggestions with short reasons. Include VRM tags like [ACTION: hug] if Sarah should react.\n\n"
+                            f"{context}\n\nRespond concisely."
+                        )
+
+                        try:
+                            resp = await sarah_brain.generate_response(prompt, is_proactive=True)
+                            await broadcast_message({"action": "reply", "text": resp.get("text", ""), "actions": resp.get("actions", [])})
+                            runtime_state["last_pet_notify"] = datetime.now().isoformat()
+                        except Exception as e:
+                            print(f"[PET MONITOR]: LLM error: {e}")
+
+                except Exception as e:
+                    print(f"[PET MONITOR]: Error reading pet state: {e}")
+
 # ========== STATIC FILES ==========
 static_path = Path(__file__).parent / "static"
 if static_path.exists():
@@ -1456,5 +1944,7 @@ if __name__ == "__main__":
     # Start proactive chat in background
     loop = asyncio.get_event_loop()
     loop.create_task(proactive_chat_loop())
+    # Start pet monitor task
+    loop.create_task(pet_monitor())
     
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")

@@ -1,0 +1,30 @@
+{
+  "name": "Pixel",
+  "species": "fox",
+  "stage": "baby",
+  "age_days": 0,
+  "birth_date": "2026-05-04T08:56:16.698418",
+  "last_checked": "2026-05-06T07:47:44.041969",
+  "needs": {
+    "hunger": 82.95667614199999,
+    "energy": 85.0,
+    "happiness": 96.47833807100001,
+    "hygiene": 77.65222538066666,
+    "health": 100.0
+  },
+  "personality": {
+    "playful": 50,
+    "shy": 30,
+    "curious": 60
+  },
+  "status": {
+    "is_sleeping": true,
+    "is_sick": false,
+    "mood": "happy"
+  },
+  "counters": {
+    "interactions_count": 0,
+    "meals_fed": 1,
+    "games_played": 1
+  }
+}

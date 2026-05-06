@@ -132,6 +132,10 @@ export default function VRMViewer() {
       currentExpression: 'neutral',
       expressionTimer: 0,
       actions: [],
+      // Movement/locomotion state for pets
+      vrmTargetPosition: null,
+      vrmMoveSpeed: 0,
+      vrmBaseY: 0,
     };
 
     // Load VRM
@@ -146,6 +150,8 @@ export default function VRMViewer() {
     window.addEventListener('vrm-animation', onAnimationEvent as EventListener);
     window.addEventListener('vrm-lipsync', onLipSyncEvent as EventListener);
     window.addEventListener('vrm-outfit-change', onOutfitChange as EventListener);
+    // Pet locomotion events (detail: { x, y, z, speed })
+    window.addEventListener('pet-move', onPetMove as EventListener);
 
     // Click handler for body interactions
     canvas.addEventListener('click', onCanvasClick);
@@ -251,6 +257,17 @@ export default function VRMViewer() {
     if (outfitPath) {
       loadVRMModel(outfitPath, 'fade');
     }
+  };
+
+  const onPetMove = (e: CustomEvent) => {
+    if (!sceneRef.current) return;
+    const detail = e.detail as any;
+    const tx = detail?.x ?? 0;
+    const ty = detail?.y ?? 0;
+    const tz = detail?.z ?? 0;
+    sceneRef.current.vrmTargetPosition = new THREE.Vector3(tx, ty, tz);
+    sceneRef.current.vrmMoveSpeed = detail?.speed ?? 1.5;
+    sceneRef.current.vrmBaseY = sceneRef.current.vrm?.scene?.position?.y ?? 0;
   };
 
   const loadVRM = () => {
@@ -359,6 +376,29 @@ export default function VRMViewer() {
         s.lipSyncTarget *= 0.9; // Decay
       }
 
+      // Pet locomotion: move VRM root toward a target position if set
+      if (s.vrmTargetPosition && s.vrm) {
+        const target = s.vrmTargetPosition as THREE.Vector3;
+        const pos = s.vrm.scene.position;
+        const dir = new THREE.Vector3().subVectors(target, pos);
+        const dist = dir.length();
+        if (dist > 0.05) {
+          const speed = s.vrmMoveSpeed || 1.5;
+          const step = Math.min(dist, speed * delta);
+          dir.normalize();
+          pos.addScaledVector(dir, step);
+          // Rotate to face movement direction
+          const yaw = Math.atan2(dir.x, dir.z);
+          s.vrm.scene.rotation.y = Math.PI + yaw;
+          // Simple bobbing during walk
+          const baseY = s.vrmBaseY ?? pos.y;
+          pos.y = baseY + Math.sin(elapsed * 8) * 0.02;
+        } else {
+          s.vrmTargetPosition = null;
+          if (s.vrm) s.vrm.scene.position.y = s.vrmBaseY ?? s.vrm.scene.position.y;
+        }
+      }
+
       // Process animation actions
       s.actions = s.actions.filter((action) => {
         const elapsed_action = elapsed - action.startTime;
@@ -409,8 +449,24 @@ export default function VRMViewer() {
   const resetPose = (vrm: VRM) => {
     const rArm = vrm.humanoid.getNormalizedBoneNode('rightUpperArm');
     const lArm = vrm.humanoid.getNormalizedBoneNode('leftUpperArm');
+    const head = vrm.humanoid.getNormalizedBoneNode('head');
+    const spine = vrm.humanoid.getNormalizedBoneNode('spine');
     if (rArm) rArm.rotation.z = -1.2;
     if (lArm) lArm.rotation.z = 1.2;
+    if (head) {
+      head.rotation.x = 0;
+      head.rotation.y = 0;
+      head.rotation.z = 0;
+    }
+    if (spine) {
+      spine.rotation.x = 0;
+      spine.rotation.y = 0;
+      spine.rotation.z = 0;
+    }
+    // restore base Y if available
+    if (sceneRef.current && sceneRef.current.vrmBaseY !== undefined && sceneRef.current.vrm) {
+      sceneRef.current.vrm.scene.position.y = sceneRef.current.vrmBaseY;
+    }
   };
 
   const applyAnimation = (vrm: VRM, name: string, elapsed: number, duration: number) => {
@@ -445,6 +501,21 @@ export default function VRMViewer() {
         vrm.scene.position.y = Math.sin(progress * Math.PI) * 0.3;
         if (rArm) rArm.rotation.z = -2.5;
         if (lArm) lArm.rotation.z = 2.5;
+        break;
+      case 'sleep':
+        // subtle breathing while sleeping and head tilt
+        if (head) head.rotation.x = -0.45 + Math.sin(progress * Math.PI * 2) * 0.02;
+        if (rArm) rArm.rotation.z = -1.0;
+        if (lArm) lArm.rotation.z = 1.0;
+        // tiny bob for breathing
+        vrm.scene.position.y = (sceneRef.current?.vrmBaseY ?? vrm.scene.position.y) + Math.sin(progress * Math.PI * 2) * 0.005;
+        break;
+      case 'sit':
+        // simple sit pose by rotating the spine and relaxing arms
+        const spine = vrm.humanoid.getNormalizedBoneNode('spine');
+        if (spine) spine.rotation.x = -0.25 * Math.sin(progress * Math.PI);
+        if (rArm) rArm.rotation.z = -1.0;
+        if (lArm) lArm.rotation.z = 1.0;
         break;
       case 'bow':
         const spine = vrm.humanoid.getNormalizedBoneNode('spine');

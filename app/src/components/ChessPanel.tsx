@@ -145,6 +145,19 @@ export default function ChessPanel() {
         </Button>
       </div>
 
+      <div className="flex flex-wrap gap-2 mb-3">
+        {store.chessBoard?.difficulty && (
+          <Badge variant="outline" className="text-xs text-slate-200">
+            Difficulty: {store.chessBoard.difficulty}
+          </Badge>
+        )}
+        {typeof store.chessBoard?.player_rating === 'number' && (
+          <Badge variant="outline" className="text-xs text-slate-200">
+            Rating: {store.chessBoard.player_rating}
+          </Badge>
+        )}
+      </div>
+
       {gameOver && (
         <div className="mb-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-center">
           <p className="text-sm font-medium text-amber-300">
