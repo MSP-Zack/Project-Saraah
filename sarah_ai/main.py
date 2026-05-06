@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from core.llm_brain import LLMBrain
 from core.tts_engine import TTSEngine
-from core.stt_engine import STTEngine
+from core.stt_engine_advanced import STTEngine
 from core.vision_engine import VisionEngine
 from core.screen_engine import ScreenEngine
 from core.memory_engine import MemoryEngine
@@ -141,7 +141,11 @@ def initialize():
     # STT Engine
     try:
         stt_engine = STTEngine()
-        print("[INIT]: STT engine ready.")
+        # Set up callbacks for advanced features
+        stt_engine.on_transcription = handle_stt_transcription
+        stt_engine.on_interruption = handle_stt_interruption
+        stt_engine.on_emotion_detected = handle_emotion_detected
+        print("[INIT]: Advanced STT engine ready with real-time conversation support.")
     except Exception as e:
         print(f"[INIT]: STT engine failed: {e}")
     
@@ -1331,6 +1335,21 @@ async def handle_websocket_message(ws: WebSocket, data: dict):
     elif msg_type == "stt_audio":
         await handle_stt_audio(ws, data)
     
+    elif msg_type == "start_voice_listening":
+        if stt_engine:
+            stt_engine.start_continuous_listening()
+            await ws.send_json({"action": "system", "text": "Voice listening started"})
+    
+    elif msg_type == "stop_voice_listening":
+        if stt_engine:
+            stt_engine.stop_continuous_listening()
+            await ws.send_json({"action": "system", "text": "Voice listening stopped"})
+    
+    elif msg_type == "set_speaking_state":
+        if stt_engine:
+            is_speaking = data.get("speaking", False)
+            stt_engine.set_speaking_state(is_speaking)
+    
     elif msg_type == "vision_frame":
         await handle_vision_frame(ws, data)
     
@@ -1532,9 +1551,57 @@ async def handle_chat_message(ws: WebSocket, data: dict):
 
 async def handle_stt_audio(ws: WebSocket, data: dict):
     """Handle audio data from STT."""
-    # Note: The browser STT sends transcribed text directly.
-    # If using Python STT, we'd process audio bytes here.
-    pass
+    # For advanced STT: process raw audio bytes
+    if stt_engine and isinstance(data.get("audio"), str):
+        try:
+            # Decode base64 audio data
+            audio_bytes = base64.b64decode(data["audio"])
+            stt_engine.add_audio_chunk(audio_bytes)
+        except Exception as e:
+            print(f"[STT]: Audio processing error: {e}")
+
+async def handle_stt_transcription(transcription: str, metadata: Dict[str, Any]):
+    """Handle transcription from advanced STT engine."""
+    print(f"[STT]: Transcribed: '{transcription}' (confidence: {metadata.get('confidence', 0):.2f})")
+
+    # Process the transcription as a chat message
+    message_data = {
+        "type": "text",
+        "text": transcription,
+        "metadata": metadata
+    }
+
+    # Find the WebSocket that sent this (we'll need to modify this for multi-client)
+    # For now, broadcast to all clients
+    await handle_chat_message(None, message_data)
+
+async def handle_stt_interruption():
+    """Handle user interruption of AI speech."""
+    print("[STT]: User interruption detected!")
+
+    # Stop current TTS playback
+    if tts_engine:
+        # TODO: Implement TTS interruption in TTS engine
+        pass
+
+    # Notify clients to stop audio playback
+    await broadcast_message({
+        "action": "interrupt_tts",
+        "timestamp": datetime.now().isoformat()
+    })
+
+    # Update STT engine state
+    if stt_engine:
+        stt_engine.set_speaking_state(False)
+
+async def handle_emotion_detected(emotion: str):
+    """Handle detected emotional tone."""
+    print(f"[STT]: Emotion detected: {emotion}")
+
+    # Could trigger VRM reactions based on emotion
+    if vrm_actions and emotion in ["excited", "angry", "loud"]:
+        # Trigger appropriate facial expression
+        pass
 
 async def handle_vision_frame(ws: WebSocket, data: dict):
     """Handle incoming vision frame."""

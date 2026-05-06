@@ -18,3 +18,5 @@ chess>=1.10.0
 pymupdf>=1.22.0
 ebooklib>=0.18
 beautifulsoup4>=4.12.0
+webrtcvad>=2.0.10
+audioop-lts>=0.2.1

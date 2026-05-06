@@ -101,6 +101,11 @@ export function useWebSocket() {
       if (data.animation) {
         window.dispatchEvent(new CustomEvent('vrm-animation', { detail: data.animation }));
       }
+    } else if (data.action === 'interrupt_tts') {
+      // Stop any ongoing audio playback
+      const audioElements = document.querySelectorAll('audio');
+      audioElements.forEach(audio => audio.pause());
+      console.log('[WS]: TTS interrupted');
     } else if (data.action === 'chess_update') {
       if (data.result?.board) {
         store.setChessBoard(data.result.board as ChessBoardState);
