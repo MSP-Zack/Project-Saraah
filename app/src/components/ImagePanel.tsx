@@ -36,11 +36,48 @@ export default function ImagePanel() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
   const [selectedImage, setSelectedImage] = useState<ImageResult | null>(null);
+  const [providers, setProviders] = useState<string[]>([]);
+  const [models, setModels] = useState<string[]>([]);
+  const [selectedProvider, setSelectedProvider] = useState('huggingface');
+  const [selectedModel, setSelectedModel] = useState('FLUX_DEV');
+  const [saveImages, setSaveImages] = useState(true);
+  const [sfwOnly, setSfwOnly] = useState(true);
+  const [imageUpload, setImageUpload] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string>('');
+  const [promptStyle, setPromptStyle] = useState('photorealistic');
 
   useEffect(() => {
     loadSavedImages();
     loadHistory();
+    loadImageSettings();
   }, []);
+
+  const loadImageSettings = async () => {
+    try {
+      const res = await fetch('/api/images/settings');
+      const data = await res.json();
+      if (data.provider) {
+        setSelectedProvider(data.provider);
+      }
+      if (data.model) {
+        setSelectedModel(data.model);
+      }
+      if (typeof data.save_images === 'boolean') {
+        setSaveImages(data.save_images);
+      }
+      if (typeof data.sfw_only === 'boolean') {
+        setSfwOnly(data.sfw_only);
+      }
+      if (Array.isArray(data.available_providers)) {
+        setProviders(data.available_providers);
+      }
+      if (Array.isArray(data.available_models)) {
+        setModels(data.available_models);
+      }
+    } catch (error) {
+      console.error('Failed to load image settings:', error);
+    }
+  };
 
   const loadSavedImages = async () => {
     try {
@@ -91,22 +128,50 @@ export default function ImagePanel() {
     setLoading(true);
     setStatus('Generating image...');
     try {
+      const payload: any = {
+        prompt,
+        style: promptStyle,
+        count: 1,
+        provider: selectedProvider,
+        model: selectedModel,
+        save_images: saveImages,
+        sfw_only: sfwOnly,
+      };
+
+      if (imageUpload) {
+        const reader = new FileReader();
+        const imageBase64 = await new Promise<string>((resolve, reject) => {
+          reader.onload = () => {
+            if (typeof reader.result === 'string') {
+              resolve(reader.result.split(',')[1]);
+            } else {
+              reject(new Error('Failed to read image file'));
+            }
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(imageUpload);
+        });
+        payload.image_input = imageBase64;
+      }
+
       const res = await fetch('/api/images/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, style: 'creative', count: 1 })
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (data.success && Array.isArray(data.images)) {
         setSavedImages((prev) => [...data.images, ...prev]);
         setHistory((prev) => [{
           id: Date.now().toString(),
-          type: 'generate',
+          type: imageUpload ? 'image_to_image' : 'generate',
           prompt,
           images: data.images,
           timestamp: new Date().toISOString(),
         }, ...prev]);
         setStatus('Image generated successfully.');
+        setImageUpload(null);
+        setImagePreviewUrl('');
       } else {
         setStatus(data.error || 'Generation failed');
       }
@@ -211,12 +276,85 @@ export default function ImagePanel() {
                 placeholder="Describe the image to generate..."
                 className="min-h-[140px] bg-white/5 border-white/10 text-white placeholder:text-white/30"
               />
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-xs uppercase text-white/60">Provider</label>
+                  <select
+                    value={selectedProvider}
+                    onChange={(e) => setSelectedProvider(e.target.value)}
+                    className="w-full rounded-lg border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white"
+                  >
+                    {providers.map((provider) => (
+                      <option key={provider} value={provider}>{provider}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs uppercase text-white/60">Model</label>
+                  <select
+                    value={selectedModel}
+                    onChange={(e) => setSelectedModel(e.target.value)}
+                    className="w-full rounded-lg border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white"
+                  >
+                    {models.map((model) => (
+                      <option key={model} value={model}>{model}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-xs uppercase text-white/60">Style</label>
+                  <input
+                    value={promptStyle}
+                    onChange={(e) => setPromptStyle(e.target.value)}
+                    placeholder="photorealistic"
+                    className="w-full rounded-lg border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs uppercase text-white/60">Upload image</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] ?? null;
+                      setImageUpload(file);
+                      if (file) {
+                        setImagePreviewUrl(URL.createObjectURL(file));
+                      } else {
+                        setImagePreviewUrl('');
+                      }
+                    }}
+                    className="w-full rounded-lg border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white"
+                  />
+                </div>
+              </div>
+              {imagePreviewUrl && (
+                <div className="rounded-xl border border-white/10 overflow-hidden bg-slate-950/80">
+                  <img src={imagePreviewUrl} alt="Upload preview" className="h-44 w-full object-cover" />
+                </div>
+              )}
               <div className="flex flex-wrap gap-2 items-center">
                 <Button onClick={generateImage} disabled={loading}>
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Sparkles className="w-4 h-4 mr-2" /> Generate</>}
                 </Button>
-                <p className="text-xs text-white/40">Create quick placeholder art from your prompt.</p>
+                <Button
+                  variant={saveImages ? 'secondary' : 'ghost'}
+                  onClick={() => setSaveImages((prev) => !prev)}
+                  size="sm"
+                >
+                  {saveImages ? 'Saving Enabled' : 'Preview Only'}
+                </Button>
+                <Button
+                  variant={sfwOnly ? 'secondary' : 'ghost'}
+                  onClick={() => setSfwOnly((prev) => !prev)}
+                  size="sm"
+                >
+                  {sfwOnly ? 'SFW Mode' : 'NSFW Allowed'}
+                </Button>
               </div>
+              <p className="text-xs text-white/40">Create premium-quality images with smart defaults and optional image-to-image transformation.</p>
             </div>
           )}
 
@@ -237,7 +375,7 @@ export default function ImagePanel() {
                     <Card key={url} className="bg-white/5 border-white/10 overflow-hidden">
                       <img src={url} alt="Saved asset" className="h-40 w-full object-cover" />
                       <div className="p-3 flex items-center justify-between gap-2">
-                        <span className="text-xs text-white/60 truncate">{url.replace('/static/generated_images/', '')}</span>
+                        <span className="text-xs text-white/60 truncate">{url.replace('/images/', '')}</span>
                         <Button size="sm" variant="ghost" onClick={() => window.open(url, '_blank')}>View</Button>
                       </div>
                     </Card>

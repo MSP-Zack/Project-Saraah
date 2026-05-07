@@ -223,6 +223,29 @@ class ImageGenerateRequest(BaseModel):
     prompt: str
     style: Optional[str] = "creative"
     count: Optional[int] = 1
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    negative_prompt: Optional[str] = None
+    seed: Optional[int] = None
+    strength: Optional[float] = 0.8
+    image_input: Optional[str] = None
+    save_images: Optional[bool] = None
+    sfw_only: Optional[bool] = None
+
+
+class ImageSettingsUpdate(BaseModel):
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    sfw_only: Optional[bool] = None
+    allow_sarah_generation: Optional[bool] = None
+    save_images: Optional[bool] = None
+    local_comfyui_url: Optional[str] = None
+    default_quality: Optional[str] = None
+    default_width: Optional[int] = None
+    default_height: Optional[int] = None
+    sarah_generation_cooldown: Optional[int] = None
 
 
 @app.get("/api/status")
@@ -766,7 +789,50 @@ async def image_generate(request: ImageGenerateRequest):
     if plugin_manager:
         plugin = plugin_manager.get_plugin("image_generation")
         if plugin:
-            return await plugin.generate(request.prompt, request.style or "creative", request.count or 1)
+            if request.image_input:
+                return await plugin.image_to_image(
+                    request.image_input,
+                    request.prompt,
+                    style=request.style or "creative",
+                    strength=request.strength or 0.8,
+                    count=request.count or 1,
+                    provider=request.provider,
+                    model=request.model,
+                    negative_prompt=request.negative_prompt,
+                    seed=request.seed,
+                    save_images=request.save_images,
+                    sfw_only=request.sfw_only,
+                )
+            return await plugin.generate(
+                request.prompt,
+                request.style or "creative",
+                request.count or 1,
+                provider=request.provider,
+                model=request.model,
+                width=request.width,
+                height=request.height,
+                negative_prompt=request.negative_prompt,
+                seed=request.seed,
+                save_images=request.save_images,
+                sfw_only=request.sfw_only,
+            )
+    return {"success": False, "error": "Image generation plugin not loaded"}
+
+@app.get("/api/images/settings")
+async def image_settings():
+    if plugin_manager:
+        plugin = plugin_manager.get_plugin("image_generation")
+        if plugin and hasattr(plugin, "get_settings"):
+            return await plugin.get_settings()
+    return {"success": False, "error": "Image generation plugin not loaded"}
+
+@app.post("/api/images/settings")
+async def update_image_settings(update: ImageSettingsUpdate):
+    if plugin_manager:
+        plugin = plugin_manager.get_plugin("image_generation")
+        if plugin and hasattr(plugin, "update_settings"):
+            settings_data = update.dict(exclude_none=True)
+            return await plugin.update_settings(settings_data)
     return {"success": False, "error": "Image generation plugin not loaded"}
 
 @app.get("/api/images/history")
@@ -774,7 +840,7 @@ async def image_history():
     if plugin_manager:
         plugin = plugin_manager.get_plugin("image_generation")
         if plugin:
-            return {"history": plugin.get_history()}
+            return {"history": await plugin.get_history()}
     return {"success": False, "error": "Image generation plugin not loaded"}
 
 @app.get("/api/images/list")
@@ -782,7 +848,7 @@ async def image_list():
     if plugin_manager:
         plugin = plugin_manager.get_plugin("image_generation")
         if plugin:
-            return {"images": plugin.list_images()}
+            return {"images": await plugin.list_images()}
     return {"success": False, "error": "Image generation plugin not loaded"}
 
 @app.get("/api/screen/monitors")
@@ -1998,6 +2064,9 @@ async def proactive_chat_loop():
 
 # ========== STATIC FILES ==========
 static_path = Path(__file__).parent / "static"
+images_path = Path(__file__).parent / "images"
+images_path.mkdir(parents=True, exist_ok=True)
+app.mount("/images", StaticFiles(directory=str(images_path)), name="images")
 if static_path.exists():
     # Serve the built frontend and all static assets from the root.
     app.mount("/", StaticFiles(directory=str(static_path), html=True), name="static_root")

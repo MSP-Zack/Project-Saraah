@@ -12,6 +12,9 @@ from typing import Dict, List, Optional, Any
 import requests
 from PIL import Image, ImageDraw, ImageFont
 
+from core.image_generation.engine import ImageGenerationEngine
+from core.image_generation.types import ImageProvider, ImageModel, ImageQuality
+
 
 class ImageGenerator:
     """Plugin-backed image generation and search support."""
@@ -270,21 +273,224 @@ class ImageGenerator:
 class Plugin:
     def __init__(self):
         self.generator = ImageGenerator()
+        self.engine = ImageGenerationEngine(Path(__file__).resolve().parent.parent / "images")
+        self.initialized = False
 
     def get_info(self) -> Dict[str, Any]:
         return self.generator.get_info()
+
+    async def _ensure_initialized(self):
+        if not self.initialized:
+            await self.engine.initialize()
+            self.initialized = True
+
+    async def get_settings(self) -> Dict[str, Any]:
+        await self._ensure_initialized()
+        return {
+            "enabled": self.engine.settings.enabled,
+            "provider": self.engine.settings.provider.value,
+            "model": self.engine.settings.model.name,
+            "sfw_only": self.engine.settings.sfw_only,
+            "allow_sarah_generation": self.engine.settings.allow_sarah_generation,
+            "save_images": self.engine.settings.save_images,
+            "local_comfyui_url": self.engine.settings.local_comfyui_url,
+            "default_quality": self.engine.settings.default_quality.name,
+            "default_width": self.engine.settings.default_width,
+            "default_height": self.engine.settings.default_height,
+            "sarah_generation_cooldown": self.engine.settings.sarah_generation_cooldown,
+            "available_providers": [p.value for p in ImageProvider],
+            "available_models": [m.name for m in ImageModel],
+            "available_qualities": [q.name for q in ImageQuality],
+        }
+
+    async def update_settings(self, settings: Dict[str, Any]) -> Dict[str, Any]:
+        await self._ensure_initialized()
+        if "provider" in settings:
+            await self.engine.set_provider(settings["provider"])
+        if "model" in settings:
+            await self.engine.set_model(settings["model"])
+        if "save_images" in settings:
+            await self.engine.set_save_images(bool(settings["save_images"]))
+        if "sfw_only" in settings:
+            await self.engine.set_sfw_only(bool(settings["sfw_only"]))
+        if "allow_sarah_generation" in settings:
+            self.engine.settings.allow_sarah_generation = bool(settings["allow_sarah_generation"])
+        if "local_comfyui_url" in settings:
+            self.engine.settings.local_comfyui_url = settings["local_comfyui_url"]
+        await self.engine.save_settings()
+        return await self.get_settings()
 
     async def search(self, query: str, source: str = "bing", limit: int = 12) -> Dict[str, Any]:
         return await self.generator.search(query, source, limit)
 
     async def download(self, url: str, filename: Optional[str] = None) -> Dict[str, Any]:
-        return await self.generator.download(url, filename)
+        try:
+            clean_url = self.generator._safe_url(url)
+            file_bytes, content_type = await asyncio.to_thread(self.generator._fetch_binary, clean_url)
+            ext = self.generator._infer_extension(clean_url, content_type)
+            name = filename.strip() if filename else None
+            if not name:
+                name = f"img_{int(datetime.now().timestamp())}_{random.randint(100,999)}.{ext}"
+            elif not name.lower().endswith(ext):
+                name = f"{name}.{ext}"
 
-    async def generate(self, prompt: str, style: str = "creative", count: int = 1) -> Dict[str, Any]:
-        return await self.generator.generate(prompt, style, count)
+            await self._ensure_initialized()
+            dest = self.engine.user_images_path / name
+            dest.write_bytes(file_bytes)
+            url_path = f"/images/user_generated/{dest.name}"
+            self.generator._record({"type": "download", "url": clean_url, "path": url_path})
+            return {"success": True, "url": url_path, "filename": dest.name}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
-    def list_images(self) -> List[str]:
-        return self.generator.list_images()
+    async def generate(
+        self,
+        prompt: str,
+        style: str = "creative",
+        count: int = 1,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+        negative_prompt: Optional[str] = None,
+        seed: Optional[int] = None,
+        save_images: Optional[bool] = None,
+        sfw_only: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        await self._ensure_initialized()
+        if not prompt:
+            return {"success": False, "error": "Prompt cannot be empty"}
 
-    def get_history(self) -> List[Dict[str, Any]]:
-        return self.generator.get_history()
+        if provider:
+            await self.engine.set_provider(provider)
+        if model:
+            await self.engine.set_model(model)
+        if save_images is not None:
+            await self.engine.set_save_images(save_images)
+        if sfw_only is not None:
+            await self.engine.set_sfw_only(sfw_only)
+
+        rendered_prompt = prompt
+        if style:
+            rendered_prompt = f"{prompt} in a {style} style"
+
+        image_width = width or self.engine.settings.default_width
+        image_height = height or self.engine.settings.default_height
+        selected_model = self.engine.settings.model.value
+        if model:
+            try:
+                selected_model = ImageModel[model].value
+            except Exception:
+                selected_model = model
+
+        images = []
+        for i in range(max(1, min(8, count))):
+            generated = await self.engine.generate_image(
+                prompt=rendered_prompt,
+                user_id="user",
+                model=selected_model,
+                quality=self.engine.settings.default_quality,
+                width=image_width,
+                height=image_height,
+                negative_prompt=negative_prompt,
+                seed=seed,
+            )
+            public_url = self._build_image_url(generated.save_path)
+            images.append(public_url)
+
+        self.generator._record({"type": "generate", "prompt": prompt, "style": style, "images": images})
+        return {"success": True, "images": images}
+
+    async def image_to_image(
+        self,
+        image_input: str,
+        prompt: str,
+        style: str = "creative",
+        strength: float = 0.8,
+        count: int = 1,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        negative_prompt: Optional[str] = None,
+        seed: Optional[int] = None,
+        save_images: Optional[bool] = None,
+        sfw_only: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        await self._ensure_initialized()
+        if not prompt:
+            return {"success": False, "error": "Prompt cannot be empty"}
+
+        if provider:
+            await self.engine.set_provider(provider)
+        if model:
+            await self.engine.set_model(model)
+        if save_images is not None:
+            await self.engine.set_save_images(save_images)
+        if sfw_only is not None:
+            await self.engine.set_sfw_only(sfw_only)
+
+        rendered_prompt = prompt
+        if style:
+            rendered_prompt = f"{prompt} in a {style} style"
+
+        try:
+            image_bytes = self._decode_image_input(image_input)
+        except Exception as e:
+            return {"success": False, "error": f"Invalid image input: {e}"}
+
+        image_width = width or self.engine.settings.default_width
+        image_height = height or self.engine.settings.default_height
+        selected_model = self.engine.settings.model.value
+        if model:
+            try:
+                selected_model = ImageModel[model].value
+            except Exception:
+                selected_model = model
+
+        images = []
+        for i in range(max(1, min(4, count))):
+            generated = await self.engine.generate_image_from_image(
+                image_input=image_bytes,
+                prompt=rendered_prompt,
+                strength=strength,
+                user_id="user",
+                model=selected_model,
+                quality=self.engine.settings.default_quality,
+                width=image_width,
+                height=image_height,
+                negative_prompt=negative_prompt,
+                seed=seed,
+            )
+            public_url = self._build_image_url(generated.save_path)
+            images.append(public_url)
+
+        self.generator._record({"type": "image_to_image", "prompt": prompt, "images": images})
+        return {"success": True, "images": images}
+
+    async def list_images(self) -> List[str]:
+        await self._ensure_initialized()
+        return await self.engine.list_saved_images()
+
+    async def get_history(self) -> List[Dict[str, Any]]:
+        await self._ensure_initialized()
+        combined = []
+        if hasattr(self.generator, "history"):
+            combined.extend(self.generator.history)
+        combined.extend(await self.engine.get_history())
+        return combined
+
+    def _build_image_url(self, save_path: Optional[str]) -> str:
+        if not save_path:
+            return ""
+        try:
+            path_obj = Path(save_path)
+            root_dir = Path(__file__).resolve().parent.parent
+            relative = path_obj.relative_to(root_dir)
+            return f"/{relative.as_posix()}"
+        except Exception:
+            return save_path
+
+    def _decode_image_input(self, image_input: str) -> bytes:
+        if image_input.startswith("data:"):
+            _, encoded = image_input.split(",", 1)
+            return base64.b64decode(encoded)
+        return base64.b64decode(image_input)
