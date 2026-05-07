@@ -18,10 +18,11 @@ import NotesPanel from '@/components/NotesPanel';
 import EbooksPanel from '@/components/EbooksPanel';
 import ToolsPanel from '@/components/ToolsPanel';
 import VRMActionsPanel from '@/components/VRMActionsPanel';
+import DiaryPanel from '@/components/DiaryPanel';
 import { Button } from '@/components/ui/button';
 import { 
   MessageSquare, Settings, Shield, Brain, Smile, Swords, Heart, 
-  Edit3, Menu, X, Sparkles, Image as ImageIcon, FileText, BookOpen
+  Edit3, Menu, X, Sparkles, Image as ImageIcon, FileText, BookOpen, Eye
 } from 'lucide-react';
 
 interface Tab {
@@ -36,6 +37,7 @@ const tabs: Tab[] = [
   { id: 'settings', label: 'Settings', icon: <Settings className="w-4 h-4" />, component: SettingsPanel },
   { id: 'permissions', label: 'Permissions', icon: <Shield className="w-4 h-4" />, component: PermissionPanel },
   { id: 'memory', label: 'Memory', icon: <Brain className="w-4 h-4" />, component: MemoryPanel },
+  { id: 'diary', label: 'Diary', icon: <Eye className="w-4 h-4" />, component: DiaryPanel },
   { id: 'notes', label: 'Notes', icon: <FileText className="w-4 h-4" />, component: NotesPanel },
   { id: 'tools', label: 'Tools', icon: <Sparkles className="w-4 h-4" />, component: ToolsPanel },
   { id: 'vrm_actions', label: 'VRM', icon: <Smile className="w-4 h-4" />, component: VRMActionsPanel },

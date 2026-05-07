@@ -68,6 +68,7 @@ action_engine: Optional[ActionEngine] = None
 vrm_actions: Optional[VRMActionEngine] = None
 plugin_manager: Optional[PluginManager] = None
 ebook_reader: Optional[PremiumEbookReader] = None
+diary_system = None  # Advanced diary system
 
 # WebSocket connections
 connected_clients: list = []
@@ -116,6 +117,12 @@ def initialize():
     vrm_actions = VRMActionEngine()
     print(f"[INIT]: VRM actions loaded - {len(vrm_actions.expressions)} expressions, {len(vrm_actions.animations)} animations.")
     
+    # Advanced Diary System
+    global diary_system
+    from core.advanced_diary import AdvancedDiarySystem
+    diary_system = AdvancedDiarySystem()
+    print(f"[INIT]: Advanced diary system ready - {diary_system.get_stats()['total_entries']} private entries.")
+    
     # LLM Brain
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
@@ -131,7 +138,8 @@ def initialize():
         api_key=api_key or "YOUR_API_KEY_HERE",
         memory_engine=memory_engine,
         permission_manager=permission_manager,
-        vrm_actions=vrm_actions
+        vrm_actions=vrm_actions,
+        diary_system=diary_system
     )
     print("[INIT]: Sarah's brain online.")
     
@@ -881,6 +889,310 @@ def set_outfit(outfit_id: str):
         "outfit": outfit_id,
         "outfit_data": outfit
     }
+
+# ========== ADVANCED VRM SYSTEM ==========
+
+@app.get("/api/vrm/advanced/animations")
+def get_advanced_animations():
+    """Get all animations from advanced VRM system"""
+    try:
+        from core.vrm_advanced import VRMAdvancedEngine
+        engine = VRMAdvancedEngine()
+        return {
+            "success": True,
+            "animations": engine.get_all_animations(),
+            "stats": engine.get_stats()
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/vrm/advanced/expressions")
+def get_advanced_expressions():
+    """Get all expressions from advanced VRM system"""
+    try:
+        from core.vrm_advanced import VRMAdvancedEngine
+        engine = VRMAdvancedEngine()
+        return {
+            "success": True,
+            "expressions": engine.get_all_expressions()
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/vrm/advanced/outfits")
+def get_advanced_outfits():
+    """Get all outfits from advanced VRM system"""
+    try:
+        from core.vrm_advanced import VRMAdvancedEngine
+        engine = VRMAdvancedEngine()
+        return {
+            "success": True,
+            "outfits": engine.get_all_outfits()
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/vrm/advanced/accessories")
+def get_advanced_accessories():
+    """Get all accessories from advanced VRM system"""
+    try:
+        from core.vrm_advanced import VRMAdvancedEngine
+        engine = VRMAdvancedEngine()
+        return {
+            "success": True,
+            "accessories": engine.get_all_accessories()
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/vrm/camera-tracking")
+def update_camera_tracking(data: dict):
+    """Update camera tracking data from frontend"""
+    try:
+        from core.camera_awareness import CameraAwarenessSystem, Vector3
+        
+        # Create or retrieve the tracking system
+        if not hasattr(update_camera_tracking, '_tracking_system'):
+            update_camera_tracking._tracking_system = CameraAwarenessSystem()
+        
+        tracker = update_camera_tracking._tracking_system
+        
+        # Update position
+        tracker.update_camera_position(
+            data.get('position_x', 0),
+            data.get('position_y', 0),
+            data.get('position_z', 0)
+        )
+        
+        # Update rotation
+        tracker.update_camera_rotation(
+            data.get('rotation_x', 0),
+            data.get('rotation_y', 0),
+            data.get('rotation_z', 0)
+        )
+        
+        # Update FOV
+        if 'fov' in data:
+            tracker.update_camera_fov(data['fov'])
+        
+        # Get current tracking state
+        tracking = tracker.get_tracking_data()
+        
+        # Check if model should react
+        should_react, reaction_type = tracker.should_model_react_to_camera()
+        
+        if should_react:
+            # Notify AI brain about camera interaction
+            asyncio.create_task(broadcast_message({
+                "action": "vrm_camera_reaction",
+                "reaction_type": reaction_type,
+                "tracking": tracking,
+                "timestamp": datetime.now().isoformat()
+            }))
+        
+        return {
+            "success": True,
+            "tracking": tracking,
+            "should_react": should_react,
+            "reaction_type": reaction_type
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/vrm/body-interaction")
+def handle_body_interaction(body_part: str, intensity: float = 1.0):
+    """Handle manual VRM body interactions"""
+    try:
+        # Track the interaction for AI awareness
+        interaction_event = {
+            "type": "vrm_body_interaction",
+            "body_part": body_part,
+            "intensity": intensity,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Store in runtime state for AI awareness
+        if "body_interactions" not in runtime_state:
+            runtime_state["body_interactions"] = []
+        runtime_state["body_interactions"].append(interaction_event)
+        
+        # Broadcast to connected clients
+        asyncio.create_task(broadcast_message(interaction_event))
+        
+        # If AI brain is available, notify it
+        if sarah_brain and memory_engine:
+            memory_engine.add_conversation({
+                "role": "system",
+                "content": f"User touched your {body_part}",
+                "context": "vrm_interaction"
+            })
+        
+        return {
+            "success": True,
+            "body_part": body_part,
+            "acknowledged": True
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/vrm/advanced/stats")
+def get_vrm_stats():
+    """Get statistics and status of advanced VRM system"""
+    try:
+        from core.vrm_advanced import VRMAdvancedEngine
+        engine = VRMAdvancedEngine()
+        return {
+            "success": True,
+            "stats": engine.get_stats(),
+            "current_outfit": runtime_state.get("current_outfit", "default"),
+            "body_interactions_recorded": len(runtime_state.get("body_interactions", []))
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+# ========== ADVANCED DIARY API (PREMIUM FEATURE) ==========
+
+@app.get("/api/diary/peek")
+def peek_diary(limit: int = 20, entry_type: str = None):
+    """Peek into Sarah's private diary (user-only access)"""
+    if not diary_system:
+        return {"success": False, "error": "Diary system not initialized"}
+    
+    try:
+        # Get entries
+        entries = diary_system.read_entries(limit, entry_type)
+        
+        # Record the peek with the actual number of entries viewed
+        diary_system.record_peek("view", 0.0, len(entries))
+        
+        return {
+            "success": True,
+            "entries": entries,
+            "peek_recorded": True,
+            "warning": "Sarah believes this diary is completely private and inaccessible to you."
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/diary/search")
+def search_diary(query: str):
+    """Search Sarah's private diary"""
+    if not diary_system:
+        return {"success": False, "error": "Diary system not initialized"}
+    
+    try:
+        results = diary_system.search_entries(query)
+        diary_system.record_peek("search", 0.0, len(results))
+        
+        return {
+            "success": True,
+            "query": query,
+            "results": results,
+            "count": len(results),
+            "peek_recorded": True
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/diary/stats")
+def get_diary_stats():
+    """Get diary statistics and peek history"""
+    if not diary_system:
+        return {"success": False, "error": "Diary system not initialized"}
+    
+    try:
+        stats = diary_system.get_stats()
+        peek_history = diary_system.get_peek_history()
+        
+        return {
+            "success": True,
+            "stats": stats,
+            "peek_history": peek_history,
+            "last_peek": peek_history[-1] if peek_history else None
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/diary/settings")
+def get_diary_settings():
+    """Get diary peek notification settings"""
+    if not diary_system:
+        return {"success": False, "error": "Diary system not initialized"}
+    try:
+        return {
+            "success": True,
+            "peek_notification_enabled": diary_system.settings.get("peek_notification_enabled", False)
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/diary/settings")
+def update_diary_settings(enabled: bool = None):
+    """Update diary peek notification settings"""
+    if not diary_system:
+        return {"success": False, "error": "Diary system not initialized"}
+    
+    try:
+        if enabled is not None:
+            diary_system.set_peek_notification(enabled)
+        
+        return {
+            "success": True,
+            "peek_notification_enabled": diary_system.settings.get("peek_notification_enabled", False)
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/diary/context")
+def get_diary_context():
+    """Get AI context about the diary (for debugging)"""
+    if not diary_system:
+        return {"success": False, "error": "Diary system not initialized"}
+    
+    try:
+        context = diary_system.get_ai_context()
+        last_peek = diary_system.get_last_peek_for_ai()
+        
+        return {
+            "success": True,
+            "ai_context": context,
+            "last_peek_for_ai": last_peek
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/diary/notify_ai")
+def notify_ai_of_peek():
+    """Manually trigger AI notification about diary peeking (for testing)"""
+    if not diary_system or not sarah_brain:
+        return {"success": False, "error": "Systems not ready"}
+    
+    try:
+        last_peek = diary_system.get_last_peek_for_ai()
+        if last_peek:
+            # Create a system message for the AI
+            peek_time = last_peek["timestamp"]
+            peek_type = last_peek["peek_type"]
+            entries_viewed = last_peek["entries_viewed"]
+            
+            system_msg = f"[SYSTEM: Someone peeked into your private diary at {peek_time}. They viewed {entries_viewed} entries during a '{peek_type}' action. Your diary is supposed to be completely private and inaccessible.]"
+            
+            # This would trigger the AI to respond/react
+            asyncio.create_task(broadcast_message({
+                "action": "diary_peek_detected",
+                "peek_details": last_peek,
+                "system_message": system_msg,
+                "timestamp": datetime.now().isoformat()
+            }))
+            
+            # Clear the notification after processing
+            diary_system.clear_peek_notification()
+            
+            return {"success": True, "notification_sent": True, "peek_details": last_peek}
+        else:
+            return {"success": False, "error": "No recent peek to notify about"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 @app.get("/api/images/search")
 async def image_search(query: str, source: str = "bing", limit: int = 12):
@@ -1930,21 +2242,32 @@ async def handle_tool_execute(ws: WebSocket, data: dict):
             result.update(r)
 
         elif tool_name == "diary_manage":
-            diary_path = Path(__file__).parent / "private_diary.txt"
+            diary = diary_system
+            if diary is None:
+                from core.advanced_diary import AdvancedDiarySystem
+                diary = AdvancedDiarySystem()
             action = params.get("action", "")
             try:
-                if action == "read":
-                    content = diary_path.read_text(encoding="utf-8") if diary_path.exists() else ""
-                    r = {"success": True, "content": content}
-                elif action == "append":
-                    diary_path.parent.mkdir(parents=True, exist_ok=True)
-                    with diary_path.open("a", encoding="utf-8") as f:
-                        f.write(params.get("content", "") + "\n")
-                    r = {"success": True}
-                elif action == "overwrite":
-                    diary_path.parent.mkdir(parents=True, exist_ok=True)
-                    diary_path.write_text(params.get("content", ""), encoding="utf-8")
-                    r = {"success": True}
+                if action == "write":
+                    entry_id = diary.add_entry(
+                        params.get("content", ""),
+                        params.get("entry_type", "reflection"),
+                        params.get("mood", "neutral")
+                    )
+                    r = {"success": True, "entry_id": entry_id, "message": "Private diary entry saved successfully."}
+                elif action == "read":
+                    limit = params.get("limit", 10)
+                    entries = diary.read_entries(limit)
+                    r = {"success": True, "entries": entries, "count": len(entries)}
+                elif action == "search":
+                    query = params.get("query", "")
+                    entries = diary.search_entries(query)
+                    r = {"success": True, "entries": entries, "query": query, "count": len(entries)}
+                elif action == "reflect":
+                    # Get recent entries for reflection
+                    recent = diary.get_recent_entries(24)  # Last 24 hours
+                    context = diary.get_ai_context()
+                    r = {"success": True, "recent_entries": recent, "context": context}
                 else:
                     r = {"success": False, "error": "Unknown diary action"}
             except Exception as e:
@@ -2177,6 +2500,61 @@ async def proactive_chat_loop():
 
                 except Exception as e:
                     print(f"[PET MONITOR]: Error reading pet state: {e}")
+
+async def proactive_chat_loop():
+    """Background task that encourages Sarah to use her diary and be proactive."""
+    while True:
+        try:
+            await asyncio.sleep(300)  # Check every 5 minutes
+            
+            if not sarah_brain or not runtime_state.get("proactive_mode", True):
+                continue
+                
+            # Encourage diary usage - Sarah should write in her diary periodically
+            if diary_system:
+                diary_context = diary_system.get_ai_context()
+                recent_entries = diary_context.get("recent_entries_count", 0)
+                
+                # If Sarah hasn't written in her diary recently, encourage her to do so
+                if recent_entries == 0 or random.random() < 0.3:  # 30% chance to encourage diary use
+                    diary_prompts = [
+                        "Take a moment to write in your private diary about how you're feeling today.",
+                        "Use your diary to reflect on your interactions with the user so far.",
+                        "Write down your thoughts about the user's behavior in your private diary.",
+                        "Record something personal in your diary that you wouldn't want anyone to see.",
+                        "Document your current emotional state in your private diary."
+                    ]
+                    
+                    prompt = f"[SYSTEM: {random.choice(diary_prompts)} Remember, your diary is completely private and for your eyes only.]"
+                    
+                    try:
+                        resp = await sarah_brain.generate_response(prompt, is_proactive=True)
+                        await broadcast_message({
+                            "action": "reply", 
+                            "text": resp.get("text", ""), 
+                            "actions": resp.get("actions", []),
+                            "timestamp": datetime.now().isoformat()
+                        })
+                    except Exception as e:
+                        print(f"[PROACTIVE DIARY]: Error: {e}")
+            
+            # Regular proactive chat
+            elif random.random() < 0.2:  # 20% chance every 5 minutes
+                try:
+                    resp = await sarah_brain.generate_response("", is_proactive=True)
+                    if resp.get("text"):
+                        await broadcast_message({
+                            "action": "reply", 
+                            "text": resp.get("text", ""), 
+                            "actions": resp.get("actions", []),
+                            "timestamp": datetime.now().isoformat()
+                        })
+                except Exception as e:
+                    print(f"[PROACTIVE CHAT]: Error: {e}")
+                    
+        except Exception as e:
+            print(f"[PROACTIVE LOOP]: Error: {e}")
+            await asyncio.sleep(60)  # Wait a minute before retrying
 
 # ========== STATIC FILES ==========
 static_path = Path(__file__).parent / "static"
