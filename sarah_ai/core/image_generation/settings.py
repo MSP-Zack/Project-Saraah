@@ -41,7 +41,8 @@ class SettingsManager:
         try:
             # Basic settings
             self.current_settings.enabled = data.get("enabled", True)
-            self.current_settings.api_key = data.get("api_key")
+            self.current_settings.huggingface_api_key = data.get("huggingface_api_key")
+            self.current_settings.replicate_api_key = data.get("replicate_api_key")
             
             # Provider
             provider_str = data.get("provider", "huggingface")
@@ -86,7 +87,8 @@ class SettingsManager:
                 "enabled": self.current_settings.enabled,
                 "provider": self.current_settings.provider.value,
                 "model": self.current_settings.model.name,
-                "api_key": self.current_settings.api_key,
+                "huggingface_api_key": self.current_settings.huggingface_api_key,
+                "replicate_api_key": self.current_settings.replicate_api_key,
                 "sfw_only": self.current_settings.sfw_only,
                 "allow_sarah_generation": self.current_settings.allow_sarah_generation,
                 "sarah_generation_cooldown": self.current_settings.sarah_generation_cooldown,
@@ -153,9 +155,9 @@ class SettingsManager:
             return False
     
     def set_api_key(self, api_key: str) -> bool:
-        """Set API key for provider"""
+        """Deprecated: keep for compatibility"""
         try:
-            self.current_settings.api_key = api_key
+            self.current_settings.huggingface_api_key = api_key
             self.save()
             return True
         except:

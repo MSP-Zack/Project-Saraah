@@ -293,6 +293,8 @@ class Plugin:
             "sfw_only": self.engine.settings.sfw_only,
             "allow_sarah_generation": self.engine.settings.allow_sarah_generation,
             "save_images": self.engine.settings.save_images,
+            "huggingface_api_key": self.engine.settings.huggingface_api_key,
+            "replicate_api_key": self.engine.settings.replicate_api_key,
             "local_comfyui_url": self.engine.settings.local_comfyui_url,
             "default_quality": self.engine.settings.default_quality.name,
             "default_width": self.engine.settings.default_width,
@@ -315,8 +317,12 @@ class Plugin:
             await self.engine.set_sfw_only(bool(settings["sfw_only"]))
         if "allow_sarah_generation" in settings:
             self.engine.settings.allow_sarah_generation = bool(settings["allow_sarah_generation"])
+        if "huggingface_api_key" in settings:
+            await self.engine.set_huggingface_api_key(settings["huggingface_api_key"])
+        if "replicate_api_key" in settings:
+            await self.engine.set_replicate_api_key(settings["replicate_api_key"])
         if "local_comfyui_url" in settings:
-            self.engine.settings.local_comfyui_url = settings["local_comfyui_url"]
+            await self.engine.set_local_comfyui_url(settings["local_comfyui_url"])
         await self.engine.save_settings()
         return await self.get_settings()
 

@@ -37,6 +37,7 @@ from core.action_engine import ActionEngine
 from core.vrm_action_engine import VRMActionEngine
 from plugins.plugin_manager import PluginManager
 from core.ebook_reader import EbookReader
+from plugins.ebook_reader import PremiumEbookReader
 
 app = FastAPI(title="Sarah AI Companion", version="2.0.0")
 
@@ -66,7 +67,7 @@ permission_manager: Optional[PermissionManager] = None
 action_engine: Optional[ActionEngine] = None
 vrm_actions: Optional[VRMActionEngine] = None
 plugin_manager: Optional[PluginManager] = None
-ebook_reader: Optional[EbookReader] = None
+ebook_reader: Optional[PremiumEbookReader] = None
 
 # WebSocket connections
 connected_clients: list = []
@@ -180,9 +181,15 @@ def initialize():
     plugin_manager.load_plugin("image_generation")
     print(f"[INIT]: Plugins loaded - {plugin_manager.list_plugins()}")
 
-    # Ebook reader
-    ebook_reader = EbookReader()
-    print(f"[INIT]: Ebook reader initialized at {ebook_reader.base}")
+    # Ebook reader (premium)
+    ebook_reader = PremiumEbookReader()
+    if memory_engine:
+        ebook_reader.set_memory_engine(memory_engine)
+    if vrm_actions:
+        ebook_reader.set_vrm_actions(vrm_actions)
+    if tts_engine:
+        ebook_reader.set_tts_engine(tts_engine)
+    print(f"[INIT]: Premium ebook reader initialized at {ebook_reader.base}")
     print("=" * 60)
     print("  SARAH IS ONLINE AND READY")
     print("=" * 60)
@@ -241,6 +248,8 @@ class ImageSettingsUpdate(BaseModel):
     sfw_only: Optional[bool] = None
     allow_sarah_generation: Optional[bool] = None
     save_images: Optional[bool] = None
+    huggingface_api_key: Optional[str] = None
+    replicate_api_key: Optional[str] = None
     local_comfyui_url: Optional[str] = None
     default_quality: Optional[str] = None
     default_width: Optional[int] = None
@@ -720,6 +729,111 @@ async def read_ebook(ebook_id: str = Form(...), start_page: int = Form(None), en
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+# ========== PREMIUM EBOOK FEATURES ==========
+
+@app.get("/api/ebooks/settings")
+async def get_ebook_settings():
+    if not ebook_reader:
+        return {"success": False, "error": "Ebook reader not initialized"}
+    try:
+        settings = await ebook_reader.get_settings()
+        return {"success": True, **settings}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/ebooks/settings")
+async def update_ebook_settings(settings: Dict[str, Any]):
+    if not ebook_reader:
+        return {"success": False, "error": "Ebook reader not initialized"}
+    try:
+        updated = await ebook_reader.update_settings(settings)
+        return {"success": True, **updated}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/ebooks/start_session")
+async def start_reading_session(ebook_id: str = Form(...), start_page: int = Form(1)):
+    if not ebook_reader:
+        return {"success": False, "error": "Ebook reader not initialized"}
+    try:
+        session = await ebook_reader.start_reading_session(ebook_id, start_page)
+        return {"success": True, "session": {
+            "ebook_id": session.ebook_id,
+            "start_time": session.start_time.isoformat(),
+            "total_pages": session.total_pages
+        }}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/ebooks/end_session")
+async def end_reading_session():
+    if not ebook_reader:
+        return {"success": False, "error": "Ebook reader not initialized"}
+    try:
+        session = await ebook_reader.end_reading_session()
+        if session:
+            return {"success": True, "session": {
+                "ebook_id": session.ebook_id,
+                "pages_read": session.pages_read,
+                "duration_minutes": (session.end_time - session.start_time).total_seconds() / 60
+            }}
+        return {"success": True, "message": "No active session"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/ebooks/bookmark")
+async def add_bookmark(ebook_id: str = Form(...), page: int = Form(...), title: str = Form(None)):
+    if not ebook_reader:
+        return {"success": False, "error": "Ebook reader not initialized"}
+    try:
+        bookmark = await ebook_reader.add_bookmark(ebook_id, page, title)
+        return {"success": True, "bookmark": bookmark}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/ebooks/note")
+async def add_note(ebook_id: str = Form(...), page: int = Form(...), content: str = Form(...)):
+    if not ebook_reader:
+        return {"success": False, "error": "Ebook reader not initialized"}
+    try:
+        note = await ebook_reader.add_note(ebook_id, page, content)
+        return {"success": True, "note": note}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/ebooks/search/{ebook_id}")
+async def search_ebook(ebook_id: str, query: str):
+    if not ebook_reader:
+        return {"success": False, "error": "Ebook reader not initialized"}
+    try:
+        results = await ebook_reader.search_ebook(ebook_id, query)
+        return {"success": True, "results": results}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/ebooks/stats")
+async def get_ebook_stats(ebook_id: str = None):
+    if not ebook_reader:
+        return {"success": False, "error": "Ebook reader not initialized"}
+    try:
+        stats = await ebook_reader.get_reading_stats(ebook_id)
+        return {"success": True, "stats": stats}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/ebooks/sarah_read")
+async def sarah_read_ebook(ebook_id: str = Form(...), start_page: int = Form(...),
+                          end_page: int = Form(...), voice_profile: str = Form(None)):
+    if not ebook_reader:
+        return {"success": False, "error": "Ebook reader not initialized"}
+    try:
+        audio_urls, metadata = await ebook_reader.narrate_with_sarah(
+            ebook_id, start_page, end_page, voice_profile
+        )
+        return {"success": True, "audio_urls": audio_urls, "metadata": metadata}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
 # ========== OUTFIT MANAGEMENT ==========
 
 @app.get("/api/vrm/models")
@@ -823,7 +937,8 @@ async def image_settings():
     if plugin_manager:
         plugin = plugin_manager.get_plugin("image_generation")
         if plugin and hasattr(plugin, "get_settings"):
-            return await plugin.get_settings()
+            settings = await plugin.get_settings()
+            return {"success": True, **settings}
     return {"success": False, "error": "Image generation plugin not loaded"}
 
 @app.post("/api/images/settings")
@@ -832,7 +947,8 @@ async def update_image_settings(update: ImageSettingsUpdate):
         plugin = plugin_manager.get_plugin("image_generation")
         if plugin and hasattr(plugin, "update_settings"):
             settings_data = update.dict(exclude_none=True)
-            return await plugin.update_settings(settings_data)
+            settings = await plugin.update_settings(settings_data)
+            return {"success": True, **settings}
     return {"success": False, "error": "Image generation plugin not loaded"}
 
 @app.get("/api/images/history")

@@ -50,7 +50,11 @@ class VRMActionEngine:
             "pat": {"description": "Patting gesture (for pet)", "type": "oneshot", "duration": 1.5, "priority": 2},
             "feed": {"description": "Feeding gesture (for pet)", "type": "oneshot", "duration": 2.0, "priority": 2},
             "play_dead": {"description": "Dramatic faint/play dead", "type": "oneshot", "duration": 3.0, "priority": 3},
-            "celebrate": {"description": "Victory celebration", "type": "oneshot", "duration": 2.5, "priority": 3},
+            "read_book": {"description": "Pull out a book and read aloud", "type": "state", "duration": None, "priority": 2},
+            "reading_page_turn": {"description": "Turn a page while reading", "type": "oneshot", "duration": 1.0, "priority": 1},
+            "close_book": {"description": "Close the book and put it away", "type": "oneshot", "duration": 2.0, "priority": 1},
+            "reading_focused": {"description": "Concentrated reading expression", "type": "state", "priority": 1},
+            "reading_smile": {"description": "Smile while reading an enjoyable part", "type": "oneshot", "duration": 1.5, "priority": 2},
         }
         
         # Body part interactions (when user clicks on VRM)

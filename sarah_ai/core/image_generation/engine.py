@@ -74,10 +74,13 @@ class ImageGenerationEngine:
         # Initialize providers
         for provider_type, provider in self.providers.items():
             try:
-                kwargs = {
-                    "api_key": self.settings.api_key,
-                    "base_url": self.settings.local_comfyui_url,
-                }
+                kwargs: Dict[str, Any] = {}
+                if provider_type == ImageProvider.HUGGING_FACE:
+                    kwargs["api_key"] = self.settings.huggingface_api_key
+                elif provider_type == ImageProvider.REPLICATE:
+                    kwargs["api_key"] = self.settings.replicate_api_key
+                elif provider_type == ImageProvider.COMFYUI_LOCAL:
+                    kwargs["base_url"] = self.settings.local_comfyui_url
                 initialized = await provider.initialize(**kwargs)
                 if initialized:
                     print(f"[IMAGE GEN]: {provider.provider_name} initialized")
@@ -339,7 +342,8 @@ class ImageGenerationEngine:
                                 self.settings.default_quality = ImageQuality(quality_value)
                             except Exception:
                                 self.settings.default_quality = ImageQuality.STANDARD
-                    self.settings.api_key = settings_data.get("api_key", self.settings.api_key)
+                    self.settings.huggingface_api_key = settings_data.get("huggingface_api_key", self.settings.huggingface_api_key)
+                    self.settings.replicate_api_key = settings_data.get("replicate_api_key", self.settings.replicate_api_key)
                     self.settings.local_comfyui_url = settings_data.get("local_comfyui_url", self.settings.local_comfyui_url)
                     self.settings.sfw_only = settings_data.get("sfw_only", self.settings.sfw_only)
                     self.settings.allow_sarah_generation = settings_data.get("allow_sarah_generation", self.settings.allow_sarah_generation)
@@ -365,7 +369,10 @@ class ImageGenerationEngine:
                 "sfw_only": self.settings.sfw_only,
                 "allow_sarah_generation": self.settings.allow_sarah_generation,
                 "save_images": self.settings.save_images,
-                "default_quality": self.settings.default_quality.name,
+                "huggingface_api_key": self.settings.huggingface_api_key,
+            "replicate_api_key": self.settings.replicate_api_key,
+            "local_comfyui_url": self.settings.local_comfyui_url,
+            "default_quality": self.settings.default_quality.name,
                 "save_path": self.settings.save_path,
                 "organize_by_source": self.settings.organize_by_source,
                 "sarah_generation_cooldown": self.settings.sarah_generation_cooldown,
@@ -514,6 +521,18 @@ class ImageGenerationEngine:
                 return False
         await self.save_settings()
         return True
+
+    async def set_huggingface_api_key(self, api_key: str) -> None:
+        self.settings.huggingface_api_key = api_key
+        await self.save_settings()
+
+    async def set_replicate_api_key(self, api_key: str) -> None:
+        self.settings.replicate_api_key = api_key
+        await self.save_settings()
+
+    async def set_local_comfyui_url(self, url: str) -> None:
+        self.settings.local_comfyui_url = url
+        await self.save_settings()
 
     async def set_sfw_only(self, value: bool) -> None:
         self.settings.sfw_only = value

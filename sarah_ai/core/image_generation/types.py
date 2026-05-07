@@ -106,7 +106,8 @@ class ImageGenerationSettings:
     enabled: bool = True
     provider: ImageProvider = ImageProvider.HUGGING_FACE
     model: ImageModel = ImageModel.FLUX_DEV
-    api_key: Optional[str] = None
+    huggingface_api_key: Optional[str] = None
+    replicate_api_key: Optional[str] = None
     local_comfyui_url: Optional[str] = None
     
     # Safety settings

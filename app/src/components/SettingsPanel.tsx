@@ -24,6 +24,20 @@ export default function SettingsPanel() {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(typeof Notification !== 'undefined' && Notification.permission === 'granted');
 
+  const [imageProvider, setImageProvider] = useState<string>('huggingface');
+  const [imageModel, setImageModel] = useState<string>('FLUX_DEV');
+  const [imageQuality, setImageQuality] = useState<string>('STANDARD');
+  const [imageSaveImages, setImageSaveImages] = useState<boolean>(true);
+  const [imageSfwOnly, setImageSfwOnly] = useState<boolean>(true);
+  const [imageAllowSarahGeneration, setImageAllowSarahGeneration] = useState<boolean>(true);
+  const [huggingfaceApiKey, setHuggingfaceApiKey] = useState<string>('');
+  const [replicateApiKey, setReplicateApiKey] = useState<string>('');
+  const [localComfyUIUrl, setLocalComfyUIUrl] = useState<string>('');
+  const [availableProviders, setAvailableProviders] = useState<string[]>([]);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [availableQualities, setAvailableQualities] = useState<string[]>([]);
+  const [imageSettingsLoaded, setImageSettingsLoaded] = useState<boolean>(false);
+
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -42,6 +56,61 @@ export default function SettingsPanel() {
     })();
     return () => { mounted = false };
   }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/images/settings');
+        const data = await res.json();
+        if (mounted && data?.success) {
+          setImageProvider(data.provider || 'huggingface');
+          setImageModel(data.model || 'FLUX_DEV');
+          setImageQuality(data.default_quality || 'STANDARD');
+          setImageSaveImages(data.save_images ?? true);
+          setImageSfwOnly(data.sfw_only ?? true);
+          setImageAllowSarahGeneration(data.allow_sarah_generation ?? true);
+          setHuggingfaceApiKey(data.huggingface_api_key || '');
+          setReplicateApiKey(data.replicate_api_key || '');
+          setLocalComfyUIUrl(data.local_comfyui_url || '');
+          setAvailableProviders(data.available_providers || []);
+          setAvailableModels(data.available_models || []);
+          setAvailableQualities(data.available_qualities || []);
+          setImageSettingsLoaded(true);
+        }
+      } catch (e) {
+        console.error('Failed to load image settings', e);
+      }
+    })();
+
+    return () => { mounted = false };
+  }, []);
+
+  const saveImageSettings = async (updates: any) => {
+    try {
+      const res = await fetch('/api/images/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (updates.provider) setImageProvider(updates.provider);
+        if (updates.model) setImageModel(updates.model);
+        if (updates.default_quality) setImageQuality(updates.default_quality);
+        if (typeof updates.save_images !== 'undefined') setImageSaveImages(updates.save_images);
+        if (typeof updates.sfw_only !== 'undefined') setImageSfwOnly(updates.sfw_only);
+        if (typeof updates.allow_sarah_generation !== 'undefined') setImageAllowSarahGeneration(updates.allow_sarah_generation);
+        if (typeof updates.huggingface_api_key !== 'undefined') setHuggingfaceApiKey(updates.huggingface_api_key);
+        if (typeof updates.replicate_api_key !== 'undefined') setReplicateApiKey(updates.replicate_api_key);
+        if (typeof updates.local_comfyui_url !== 'undefined') setLocalComfyUIUrl(updates.local_comfyui_url);
+      }
+      return data;
+    } catch (e) {
+      console.error('Failed to save image settings', e);
+      return { success: false, error: 'Unable to save image settings' };
+    }
+  };
 
   const sendConfig = (updates: any) => {
     const ws = getWebSocket();
@@ -301,6 +370,131 @@ export default function SettingsPanel() {
               ) : (
                 <div className="text-xs text-white/50">No custom voices uploaded yet.</div>
               )}
+            </div>
+          </div>
+        </Card>
+
+        <Card className="bg-white/5 border-white/10 p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-cyan-400" />
+            <h3 className="text-sm font-medium text-white">Image Generation</h3>
+          </div>
+          <p className="text-xs text-white/50">Configure the premium image generation feature, provider keys, and safety defaults.</p>
+
+          <div className="grid gap-3">
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs text-white/70 mb-1 block">Provider</Label>
+                <Select value={imageProvider} onValueChange={(value) => setImageProvider(value)}>
+                  <SelectTrigger className="bg-white/5 border-white/10 text-white w-full">
+                    <SelectValue placeholder="Select provider" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-900 border-white/20">
+                    {availableProviders.length > 0 ? availableProviders.map((item) => (
+                      <SelectItem key={item} value={item}>{item.replace('_', ' ').toUpperCase()}</SelectItem>
+                    )) : (
+                      <>
+                        <SelectItem value="huggingface">HuggingFace</SelectItem>
+                        <SelectItem value="replicate">Replicate</SelectItem>
+                        <SelectItem value="comfyui_local">Local ComfyUI</SelectItem>
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs text-white/70 mb-1 block">Model</Label>
+                <Select value={imageModel} onValueChange={(value) => setImageModel(value)}>
+                  <SelectTrigger className="bg-white/5 border-white/10 text-white w-full">
+                    <SelectValue placeholder="Select model" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-900 border-white/20">
+                    {availableModels.length > 0 ? availableModels.map((item) => (
+                      <SelectItem key={item} value={item}>{item}</SelectItem>
+                    )) : (
+                      <>
+                        <SelectItem value="FLUX_DEV">FLUX_DEV</SelectItem>
+                        <SelectItem value="FLUX_SCHNELL">FLUX_SCHNELL</SelectItem>
+                        <SelectItem value="RELIBERATE_V3">RELIBERATE_V3</SelectItem>
+                        <SelectItem value="FLUX_PRO">FLUX_PRO</SelectItem>
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs text-white/70 mb-1 block">Default Quality</Label>
+                <Select value={imageQuality} onValueChange={(value) => setImageQuality(value)}>
+                  <SelectTrigger className="bg-white/5 border-white/10 text-white w-full">
+                    <SelectValue placeholder="Quality" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-900 border-white/20">
+                    {availableQualities.length > 0 ? availableQualities.map((item) => (
+                      <SelectItem key={item} value={item}>{item}</SelectItem>
+                    )) : (
+                      <>
+                        <SelectItem value="DRAFT">Draft</SelectItem>
+                        <SelectItem value="STANDARD">Standard</SelectItem>
+                        <SelectItem value="HIGH">High</SelectItem>
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs text-white/70 mb-1 block">Local ComfyUI URL</Label>
+                <Input
+                  value={localComfyUIUrl}
+                  onChange={(e) => setLocalComfyUIUrl((e.target as HTMLInputElement).value)}
+                  placeholder="http://localhost:8188"
+                  className="bg-white/5 border-white/10 text-white"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-3">
+              <div>
+                <Label className="text-xs text-white/70 mb-1 block">HuggingFace API Key</Label>
+                <Input
+                  value={huggingfaceApiKey}
+                  onChange={(e) => setHuggingfaceApiKey((e.target as HTMLInputElement).value)}
+                  placeholder="Optional API key for HuggingFace"
+                  className="bg-white/5 border-white/10 text-white"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-white/70 mb-1 block">Replicate API Key</Label>
+                <Input
+                  value={replicateApiKey}
+                  onChange={(e) => setReplicateApiKey((e.target as HTMLInputElement).value)}
+                  placeholder="Optional API key for Replicate"
+                  className="bg-white/5 border-white/10 text-white"
+                />
+              </div>
+            </div>
+
+            <div className="grid sm:grid-cols-3 gap-3">
+              <Button size="sm" onClick={() => saveImageSettings({ provider: imageProvider, model: imageModel, default_quality: imageQuality, local_comfyui_url: localComfyUIUrl, huggingface_api_key: huggingfaceApiKey, replicate_api_key: replicateApiKey })}>
+                Save Image Settings
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => saveImageSettings({ save_images: !imageSaveImages })}>
+                {imageSaveImages ? 'Stop Saving Images' : 'Save Images Automatically'}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => saveImageSettings({ sfw_only: !imageSfwOnly })}>
+                {imageSfwOnly ? 'SFW Mode On' : 'Allow More Content'}
+              </Button>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Button size="sm" variant={imageAllowSarahGeneration ? undefined : 'outline'} onClick={() => saveImageSettings({ allow_sarah_generation: !imageAllowSarahGeneration })}>
+                {imageAllowSarahGeneration ? 'Sarah Image Generation: Enabled' : 'Sarah Image Generation: Disabled'}
+              </Button>
+              <div className="text-xs text-white/60">
+                Sarah-generated images are stored separately and can support vision-aware prompts when Sarah is active.
+              </div>
             </div>
           </div>
         </Card>
