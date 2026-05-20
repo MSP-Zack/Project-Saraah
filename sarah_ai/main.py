@@ -172,19 +172,11 @@ def initialize():
     
     # Plugin Manager
     plugin_manager = PluginManager()
-    # Auto-load plugins
-    plugin_manager.load_plugin("chess_game")
-    # Prefer v2 plugins when available
-    try:
-        plugin_manager.load_plugin("chess_v2")
-    except Exception:
-        pass
-    plugin_manager.load_plugin("tamagotchi_pet")
-    # Also load v2 plugin if present
-    try:
-        plugin_manager.load_plugin("tamagotchi_v2")
-    except Exception:
-        pass
+    # Prefer v2 plugins and only load fallback legacy plugins if needed.
+    if not plugin_manager.load_plugin("chess_v2"):
+        plugin_manager.load_plugin("chess_game")
+    if not plugin_manager.load_plugin("tamagotchi_v2"):
+        plugin_manager.load_plugin("tamagotchi_pet")
     plugin_manager.load_plugin("collab_editor")
     plugin_manager.load_plugin("image_generation")
     print(f"[INIT]: Plugins loaded - {plugin_manager.list_plugins()}")
