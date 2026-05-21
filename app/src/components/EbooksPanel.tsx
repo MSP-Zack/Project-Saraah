@@ -34,7 +34,7 @@ export default function EbooksPanel() {
   const currentIndex = useRef<number>(0);
 
   // Premium features
-  const [ebookSettings, setEbookSettings] = useState<any>({});
+  const [, setEbookSettings] = useState<any>({});
   const [bookmarks, setBookmarks] = useState<any[]>([]);
   const [notes, setNotes] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -131,22 +131,6 @@ export default function EbooksPanel() {
         alert('Note added!');
       }
     } catch (e) { console.error('Failed to add note', e); }
-  };
-
-  const startReadingSession = async () => {
-    if (!selected) return;
-    try {
-      const form = new FormData();
-      form.append('ebook_id', selected);
-      form.append('start_page', String(startPage || 1));
-      await fetch('/api/ebooks/start_session', { method: 'POST', body: form });
-    } catch (e) { console.error('Failed to start session', e); }
-  };
-
-  const endReadingSession = async () => {
-    try {
-      await fetch('/api/ebooks/end_session', { method: 'POST' });
-    } catch (e) { console.error('Failed to end session', e); }
   };
 
   const sarahRead = async () => {

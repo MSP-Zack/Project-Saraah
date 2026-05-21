@@ -36,7 +36,7 @@ export default function SettingsPanel() {
   const [availableProviders, setAvailableProviders] = useState<string[]>([]);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [availableQualities, setAvailableQualities] = useState<string[]>([]);
-  const [imageSettingsLoaded, setImageSettingsLoaded] = useState<boolean>(false);
+  const [, setImageSettingsLoaded] = useState<boolean>(false);
 
   useEffect(() => {
     let mounted = true;

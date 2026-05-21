@@ -16,7 +16,7 @@ import shutil
 import time
 import random
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, File, UploadFile, Form
+from fastapi import Body, FastAPI, WebSocket, WebSocketDisconnect, HTTPException, File, UploadFile, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -175,6 +175,7 @@ def initialize():
     # Prefer v2 plugins and only load fallback legacy plugins if needed.
     if not plugin_manager.load_plugin("chess_v2"):
         plugin_manager.load_plugin("chess_game")
+    plugin_manager.load_plugin("stratego")
     if not plugin_manager.load_plugin("tamagotchi_v2"):
         plugin_manager.load_plugin("tamagotchi_pet")
     plugin_manager.load_plugin("collab_editor")
@@ -1327,6 +1328,135 @@ def chess_board():
             res = plugin.get_board()
             return res if isinstance(res, dict) and res.get("board") else {"board": res}
     return {"success": False, "error": "Chess plugin not loaded"}
+
+
+@app.post("/api/stratego/new")
+def stratego_new(data: dict = Body({})):
+    if plugin_manager:
+        plugin = plugin_manager.get_plugin("stratego")
+        if plugin:
+            difficulty = data.get('difficulty', 3)
+            preset = data.get('preset', 'classic')
+            rows = data.get('rows')
+            columns = data.get('columns')
+            piece_counts = data.get('piece_counts')
+            obstacles = data.get('obstacles')
+            res = plugin.new_game(
+                difficulty,
+                preset=preset,
+                rows=rows,
+                columns=columns,
+                piece_counts=piece_counts,
+                manual_setup=True,
+                obstacles=obstacles,
+            )
+            try:
+                asyncio.create_task(broadcast_message({"action": "stratego_update", "result": {"board": res}}))
+            except Exception:
+                pass
+            return {"board": res}
+    return {"success": False, "error": "Stratego plugin not loaded"}
+
+
+@app.post("/api/stratego/place")
+def stratego_place(data: dict = Body({})):
+    if plugin_manager:
+        plugin = plugin_manager.get_plugin("stratego")
+        if plugin:
+            row = data.get('row')
+            col = data.get('col')
+            code = data.get('code') or data.get('piece')
+            res = plugin.place_piece(row, col, code)
+            try:
+                asyncio.create_task(broadcast_message({"action": "stratego_update", "result": {"board": res}}))
+            except Exception:
+                pass
+            return res
+    return {"success": False, "error": "Stratego plugin not loaded"}
+
+
+@app.post("/api/stratego/remove")
+def stratego_remove(data: dict = Body({})):
+    if plugin_manager:
+        plugin = plugin_manager.get_plugin("stratego")
+        if plugin:
+            row = data.get('row')
+            col = data.get('col')
+            res = plugin.remove_piece(row, col)
+            try:
+                asyncio.create_task(broadcast_message({"action": "stratego_update", "result": {"board": res}}))
+            except Exception:
+                pass
+            return res
+    return {"success": False, "error": "Stratego plugin not loaded"}
+
+
+@app.post("/api/stratego/start")
+def stratego_start(data: dict = Body({})):
+    if plugin_manager:
+        plugin = plugin_manager.get_plugin("stratego")
+        if plugin:
+            res = plugin.begin_game()
+            try:
+                asyncio.create_task(broadcast_message({"action": "stratego_update", "result": {"board": res}}))
+            except Exception:
+                pass
+            return res
+    return {"success": False, "error": "Stratego plugin not loaded"}
+
+
+@app.post("/api/stratego/save")
+def stratego_save():
+    if plugin_manager:
+        plugin = plugin_manager.get_plugin("stratego")
+        if plugin:
+            res = plugin.save_game()
+            return res
+    return {"success": False, "error": "Stratego plugin not loaded"}
+
+
+@app.post("/api/stratego/load")
+def stratego_load():
+    if plugin_manager:
+        plugin = plugin_manager.get_plugin("stratego")
+        if plugin:
+            res = plugin.load_game()
+            try:
+                asyncio.create_task(broadcast_message({"action": "stratego_update", "result": {"board": res}}))
+            except Exception:
+                pass
+            return res
+    return {"success": False, "error": "Stratego plugin not loaded"}
+
+
+@app.get("/api/stratego/board")
+def stratego_board():
+    if plugin_manager:
+        plugin = plugin_manager.get_plugin("stratego")
+        if plugin:
+            res = plugin.get_board()
+            return res if isinstance(res, dict) and res.get("board") else {"board": res}
+    return {"success": False, "error": "Stratego plugin not loaded"}
+
+
+@app.post("/api/stratego/move")
+def stratego_move(data: dict = Body({})):
+    if plugin_manager:
+        plugin = plugin_manager.get_plugin("stratego")
+        if plugin:
+            from_row = data.get('from_row')
+            from_col = data.get('from_col')
+            to_row = data.get('to_row')
+            to_col = data.get('to_col')
+            result = plugin.make_move(from_row, from_col, to_row, to_col)
+            if isinstance(result, dict) and not result.get("player_move") and result.get("board"):
+                result = {"player_move": result, "board": result["board"]}
+            try:
+                asyncio.create_task(broadcast_message({"action": "stratego_update", "result": result}))
+            except Exception:
+                pass
+            return result
+    return {"success": False, "error": "Stratego plugin not loaded"}
 
 
 @app.post("/api/chess/analyze")

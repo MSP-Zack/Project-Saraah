@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { AppState, ChatMessage, ChessBoardState, PetState, PermissionMap, EditorDocument } from '@/types';
+import type { AppState, ChatMessage, ChessBoardState, StrategoBoardState, PetState, PermissionMap, EditorDocument } from '@/types';
 
 interface StoreState extends AppState {
   // Actions
@@ -22,6 +22,8 @@ interface StoreState extends AppState {
   setCurrentThinking: (thinking: string) => void;
   setChessBoard: (board: ChessBoardState | null) => void;
   setSelectedChessPiece: (piece: { row: number; col: number } | null) => void;
+  setStrategoBoard: (board: StrategoBoardState | null) => void;
+  setSelectedStrategoPiece: (piece: { row: number; col: number } | null) => void;
   setPetState: (state: PetState | null) => void;
   setDocuments: (docs: { id: string; title: string; modified: string; preview: string }[]) => void;
   setActiveDocument: (doc: EditorDocument | null) => void;
@@ -66,6 +68,8 @@ export const useStore = create<StoreState>((set) => ({
   currentThinking: '',
   chessBoard: null,
   selectedChessPiece: null,
+  strategoBoard: null,
+  selectedStrategoPiece: null,
   petState: null,
   documents: [],
   activeDocument: null,
@@ -91,6 +95,8 @@ export const useStore = create<StoreState>((set) => ({
   setCurrentThinking: (thinking) => set({ currentThinking: thinking }),
   setChessBoard: (board) => set({ chessBoard: board }),
   setSelectedChessPiece: (piece) => set({ selectedChessPiece: piece }),
+  setStrategoBoard: (board) => set({ strategoBoard: board }),
+  setSelectedStrategoPiece: (piece) => set({ selectedStrategoPiece: piece }),
   setPetState: (state) => set({ petState: state }),
   setDocuments: (docs) => set({ documents: docs }),
   setActiveDocument: (doc) => set({ activeDocument: doc }),

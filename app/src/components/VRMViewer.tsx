@@ -26,6 +26,9 @@ export default function VRMViewer() {
     currentExpression: string;
     expressionTimer: number;
     actions: { name: string; startTime: number; duration: number }[];
+    vrmTargetPosition: THREE.Vector3 | null;
+    vrmMoveSpeed: number;
+    vrmBaseY: number;
   } | null>(null);
 
   const initScene = useCallback(() => {
@@ -518,8 +521,8 @@ export default function VRMViewer() {
         if (lArm) lArm.rotation.z = 1.0;
         break;
       case 'bow':
-        const spine = vrm.humanoid.getNormalizedBoneNode('spine');
-        if (spine) spine.rotation.x = 0.5 * Math.sin(progress * Math.PI);
+        const spineNode = vrm.humanoid.getNormalizedBoneNode('spine');
+        if (spineNode) spineNode.rotation.x = 0.5 * Math.sin(progress * Math.PI);
         break;
       case 'clap':
         if (rArm) rArm.rotation.z = -0.3 + Math.sin(progress * Math.PI * 6) * 0.1;

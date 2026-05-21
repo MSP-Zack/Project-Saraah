@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useStore } from './useStore';
-import type { ChatMessage, ChessBoardState, PetState } from '@/types';
+import type { ChatMessage, ChessBoardState, PetState, StrategoBoardState } from '@/types';
 
 let ws: WebSocket | null = null;
 let messageHandlers: ((msg: any) => void)[] = [];
@@ -111,6 +111,12 @@ export function useWebSocket() {
         store.setChessBoard(data.result.board as ChessBoardState);
       } else if (data.result?.player_move?.board) {
         store.setChessBoard(data.result.player_move.board as ChessBoardState);
+      }
+    } else if (data.action === 'stratego_update') {
+      if (data.result?.board) {
+        store.setStrategoBoard(data.result.board as StrategoBoardState);
+      } else if (data.result?.player_move?.board) {
+        store.setStrategoBoard(data.result.player_move.board as StrategoBoardState);
       }
     } else if (data.action === 'pet_update') {
       if (data.result?.state) {

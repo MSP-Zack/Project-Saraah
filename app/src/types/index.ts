@@ -72,6 +72,28 @@ export interface ChessBoardState {
   chess_stats?: Record<string, any>;
 }
 
+export interface StrategoBoardState {
+  board: string[][];
+  current_player: string;
+  move_history: string[];
+  captured_white: string[];
+  captured_black: string[];
+  game_over: boolean;
+  winner: string | null;
+  difficulty?: string;
+  piece_counts?: Record<string, number>;
+  deployment_counts?: Record<string, number>;
+  setup_phase?: boolean;
+  board_config?: {
+    preset: string;
+    rows: number;
+    columns: number;
+    initial_rows: number;
+    obstacles: [number, number][];
+    piece_counts: Record<string, number>;
+  };
+}
+
 export interface PetState {
   name: string;
   species: string;
@@ -154,6 +176,8 @@ export interface AppState {
   // Games
   chessBoard: ChessBoardState | null;
   selectedChessPiece: { row: number; col: number } | null;
+  strategoBoard: StrategoBoardState | null;
+  selectedStrategoPiece: { row: number; col: number } | null;
   
   // Pet
   petState: PetState | null;
@@ -171,6 +195,7 @@ export type TabId =
   | 'memory' 
   | 'vrm' 
   | 'chess' 
+  | 'stratego' 
   | 'pet' 
   | 'editor'
   | 'thinking';

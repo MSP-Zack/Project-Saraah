@@ -10,6 +10,7 @@ import OutfitPanel from '@/components/OutfitPanel';
 import ImagePanel from '@/components/ImagePanel';
 import VRMPanel from '@/components/VRMPanel';
 import ChessPanel from '@/components/ChessPanel';
+import StrategoPanel from '@/components/StrategoPanel';
 import PetPanel from '@/components/PetPanel';
 import EditorPanel from '@/components/EditorPanel';
 import ThinkingDisplay from '@/components/ThinkingDisplay';
@@ -46,6 +47,7 @@ const tabs: Tab[] = [
   { id: 'outfit', label: 'Outfit', icon: <Sparkles className="w-4 h-4" />, component: OutfitPanel },
   { id: 'vrm', label: 'VRM', icon: <Smile className="w-4 h-4" />, component: VRMPanel },
   { id: 'chess', label: 'Chess', icon: <Swords className="w-4 h-4" />, component: ChessPanel },
+  { id: 'stratego', label: 'Stratego', icon: <Shield className="w-4 h-4" />, component: StrategoPanel },
   { id: 'pet', label: 'Pet', icon: <Heart className="w-4 h-4" />, component: PetPanel },
   { id: 'editor', label: 'Editor', icon: <Edit3 className="w-4 h-4" />, component: EditorPanel },
 ];
