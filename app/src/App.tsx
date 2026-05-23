@@ -103,6 +103,26 @@ function App() {
       {/* Thinking Display */}
       <ThinkingDisplay />
 
+      {/* Live webcam vision overlay */}
+      {store.webcamVisionEnabled && store.webcamVisionDescription && (
+        <div className="fixed top-20 left-4 right-[420px] z-40 pointer-events-none">
+          <div className="rounded-3xl border border-violet-400/20 bg-black/70 p-3 text-xs text-slate-100 shadow-2xl shadow-violet-500/5 backdrop-blur-md">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex h-2.5 w-2.5 rounded-full bg-violet-400 animate-pulse" />
+                  <span className="text-[10px] uppercase tracking-[0.22em] text-violet-300">Live camera vision</span>
+                </div>
+                <p className="text-sm leading-snug text-white">{store.webcamVisionDescription}</p>
+              </div>
+              {store.webcamVisionTimestamp && (
+                <span className="text-[10px] text-white/40">{new Date(store.webcamVisionTimestamp).toLocaleTimeString()}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Side Panel */}
       <div
         className={`fixed top-0 right-0 h-full z-40 transition-transform duration-300 ease-in-out ${

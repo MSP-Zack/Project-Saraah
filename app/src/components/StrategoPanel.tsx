@@ -5,35 +5,35 @@ import { Badge } from '@/components/ui/badge';
 import { RotateCcw, Shield, HelpCircle } from 'lucide-react';
 
 const pieceLabels: Record<string, string> = {
-  'N': '10',
-  'G': '9',
-  'C': '8',
-  'M': '7',
-  'A': '6',
-  'L': '5',
-  'E': '4',
-  'R': '3',
-  'O': '2',
-  'P': '1',
-  'S': 'Spy',
-  'F': 'Flag',
-  'B': 'Bomb',
+  N: '10',
+  G: '9',
+  C: '8',
+  M: '7',
+  A: '6',
+  L: '5',
+  E: '4',
+  R: '3',
+  O: '2',
+  P: '1',
+  S: 'Spy',
+  F: 'Flag',
+  B: 'Bomb',
 };
 
 const pieceNames: Record<string, string> = {
-  'N': 'Marshal',
-  'G': 'General',
-  'C': 'Colonel',
-  'M': 'Major',
-  'A': 'Captain',
-  'L': 'Lieutenant',
-  'E': 'Sergeant',
-  'R': 'Miner',
-  'O': 'Scout',
-  'P': 'Private',
-  'S': 'Spy',
-  'F': 'Flag',
-  'B': 'Bomb',
+  N: 'Marshal',
+  G: 'General',
+  C: 'Colonel',
+  M: 'Major',
+  A: 'Captain',
+  L: 'Lieutenant',
+  E: 'Sergeant',
+  R: 'Miner',
+  O: 'Scout',
+  P: 'Private',
+  S: 'Spy',
+  F: 'Flag',
+  B: 'Bomb',
 };
 
 const presetOptions = [
@@ -70,9 +70,7 @@ const defaultCustomPieceCounts: Record<string, number> = {
 };
 
 const getCode = (cell: string) => (cell === '.' ? '.' : cell.slice(1));
-
 const isOwnCell = (cell: string) => cell.startsWith('w');
-
 const createEmptyBoard = (rows = 10, cols = 10) => Array.from({ length: rows }, () => Array(cols).fill('.'));
 
 export default function StrategoPanel() {
@@ -88,35 +86,38 @@ export default function StrategoPanel() {
   const [customRows, setCustomRows] = useState(10);
   const [customColumns, setCustomColumns] = useState(10);
   const [customPieceCounts, setCustomPieceCounts] = useState<Record<string, number>>(defaultCustomPieceCounts);
-  const [boardConfig, setBoardConfig] = useState<{ preset: string; rows: number; columns: number; initial_rows: number; obstacles: [number, number][]; piece_counts: Record<string, number> } | null>(null);
+  const [boardConfig, setBoardConfig] = useState<{ preset: string; rows: number; columns: number; initial_rows: number; obstacles: [number, number][]; piece_counts: Record<string, number>; } | null>(null);
   const [showRules, setShowRules] = useState(false);
   const [pieceCounts, setPieceCounts] = useState<Record<string, number>>({});
   const [deploymentCounts, setDeploymentCounts] = useState<Record<string, number>>(defaultCustomPieceCounts);
   const [selectedSetupPiece, setSelectedSetupPiece] = useState<string>('N');
   const [setupPhase, setSetupPhase] = useState(false);
-  const [moveHistory, setMoveHistory] = useState<string[]>([]);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [capturedWhite, setCapturedWhite] = useState<string[]>([]);
 
+  const updateStateFromResponse = (newState: any) => {
+    store.setStrategoBoard(newState);
+    setBoard(newState.board || createEmptyBoard());
+    setCurrentPlayer(newState.current_player || 'white');
+    setGameOver(newState.game_over || false);
+    setWinner(newState.winner || null);
+    const counts = newState.piece_counts?.white;
+    setPieceCounts(typeof counts === 'object' && counts !== null ? (counts as Record<string, number>) : {});
+    setDeploymentCounts(newState.deployment_counts || (typeof counts === 'object' && counts !== null ? (counts as Record<string, number>) : {}));
+    setSetupPhase(newState.setup_phase || false);
+    setCapturedWhite(newState.captured_white || []);
+    if (newState.board_config) {
+      setBoardConfig(newState.board_config);
+      setPreset(newState.board_config.preset || 'classic');
+      setCustomRows(newState.board_config.rows || 10);
+      setCustomColumns(newState.board_config.columns || 10);
+    }
+  };
+
   useEffect(() => {
     if (store.strategoBoard) {
-      setBoard(store.strategoBoard.board || createEmptyBoard());
-      setCurrentPlayer(store.strategoBoard.current_player || 'white');
-      setGameOver(store.strategoBoard.game_over || false);
-      setWinner(store.strategoBoard.winner || null);
-      const counts = store.strategoBoard.piece_counts?.white;
-      setPieceCounts(typeof counts === 'object' && counts !== null ? (counts as Record<string, number>) : {});
-      setDeploymentCounts(store.strategoBoard.deployment_counts || (typeof counts === 'object' && counts !== null ? (counts as Record<string, number>) : {}));
-      setSetupPhase(store.strategoBoard.setup_phase || false);
-      setMoveHistory(store.strategoBoard.move_history || []);
-      setCapturedWhite(store.strategoBoard.captured_white || []);
-      if (store.strategoBoard.board_config) {
-        setBoardConfig(store.strategoBoard.board_config);
-        setPreset(store.strategoBoard.board_config.preset || 'classic');
-        setCustomRows(store.strategoBoard.board_config.rows || 10);
-        setCustomColumns(store.strategoBoard.board_config.columns || 10);
-      }
+      updateStateFromResponse(store.strategoBoard);
     }
   }, [store.strategoBoard]);
 
@@ -126,48 +127,23 @@ export default function StrategoPanel() {
         const res = await fetch('/api/stratego/board');
         const data = await res.json();
         if (data.board) {
-          store.setStrategoBoard(data);
+          updateStateFromResponse(data);
         }
       } catch (e) {
         console.error('Failed to load Stratego state:', e);
       }
     }
     loadBoard();
-  }, [store]);
-
-  const startNewGame = async () => {
-    try {
-      const payload: any = {
-        difficulty,
-        preset,
-      };
-      if (preset === 'custom') {
-        payload.rows = customRows;
-        payload.columns = customColumns;
-        payload.piece_counts = customPieceCounts;
-      }
-
-      const res = await fetch('/api/stratego/new', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      const newState = data.board || data;
-      if (newState.board) {
-        store.setStrategoBoard(newState);
-        setDeploymentCounts(newState.deployment_counts || deploymentCounts);
-        setSetupPhase(newState.setup_phase || false);
-        setSelected(null);
-        setValidMoves([]);
-      }
-    } catch (e) {
-      console.error('Failed to start Stratego game:', e);
-    }
-  };
+  }, []);
 
   const boardRows = board.length;
   const boardCols = board[0]?.length || 0;
+
+  const getDeploymentRows = () => boardConfig?.initial_rows || 4;
+  const isDeploymentCell = (row: number) => {
+    if (!boardConfig) return false;
+    return row >= boardRows - getDeploymentRows();
+  };
 
   const computeValidMoves = (row: number, col: number) => {
     const cell = board[row][col];
@@ -189,10 +165,31 @@ export default function StrategoPanel() {
     return moves;
   };
 
-  const getDeploymentRows = () => boardConfig?.initial_rows || 4;
-  const isDeploymentCell = (row: number, col: number) => {
-    if (!boardConfig) return false;
-    return row >= boardRows - getDeploymentRows();
+  const startNewGame = async () => {
+    try {
+      const payload: any = { difficulty, preset };
+      if (preset === 'custom') {
+        payload.rows = customRows;
+        payload.columns = customColumns;
+        payload.piece_counts = customPieceCounts;
+      }
+      const res = await fetch('/api/stratego/new', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      const newState = data.board || data;
+      if (newState.board) {
+        updateStateFromResponse(newState);
+        setSelected(null);
+        setValidMoves([]);
+        setErrorMessage(null);
+        setSaveMessage(null);
+      }
+    } catch (e) {
+      console.error('Failed to start Stratego game:', e);
+    }
   };
 
   const placePieceOnBoard = async (row: number, col: number) => {
@@ -209,9 +206,10 @@ export default function StrategoPanel() {
       });
       const data = await res.json();
       if (data?.board) {
-        setBoard(data.board);
-        setDeploymentCounts(data.deployment_counts || deploymentCounts);
-        setSetupPhase(data.setup_phase || true);
+        updateStateFromResponse(data);
+      }
+      if (data?.error) {
+        setErrorMessage(data.error);
       }
     } catch (e) {
       console.error('Place piece failed:', e);
@@ -228,12 +226,41 @@ export default function StrategoPanel() {
       });
       const data = await res.json();
       if (data?.board) {
-        setBoard(data.board);
-        setDeploymentCounts(data.deployment_counts || deploymentCounts);
+        updateStateFromResponse(data);
       }
-     } catch (e) {
-       console.error('Remove piece failed:', e);
-     }
+      if (data?.error) {
+        setErrorMessage(data.error);
+      }
+    } catch (e) {
+      console.error('Remove piece failed:', e);
+      setErrorMessage('Unable to remove the piece.');
+    }
+  };
+
+  const beginBattle = async () => {
+    if (Object.values(deploymentCounts).some((count) => count > 0)) {
+      setErrorMessage('You must deploy all remaining pieces before beginning the battle.');
+      return;
+    }
+    setErrorMessage(null);
+    try {
+      const res = await fetch('/api/stratego/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (data?.board) {
+        updateStateFromResponse(data);
+        setSelected(null);
+        setValidMoves([]);
+      }
+      if (data?.error) {
+        setErrorMessage(data.error);
+      }
+    } catch (e) {
+      console.error('Start battle failed:', e);
+      setErrorMessage('Unable to begin the battle.');
+    }
   };
 
   const saveGame = async () => {
@@ -245,6 +272,12 @@ export default function StrategoPanel() {
       });
       const data = await res.json();
       setSaveMessage(data.message || 'Game saved.');
+      if (data?.board) {
+        updateStateFromResponse(data);
+      }
+      if (data?.error) {
+        setErrorMessage(data.error);
+      }
     } catch (e) {
       console.error('Save failed:', e);
       setSaveMessage('Save failed.');
@@ -260,12 +293,14 @@ export default function StrategoPanel() {
       });
       const data = await res.json();
       if (data?.board) {
-        store.setStrategoBoard(data);
-        setBoard(data.board);
-        setSetupPhase(data.setup_phase || false);
+        updateStateFromResponse(data);
+      }
+      if (data?.error) {
+        setErrorMessage(data.error);
       }
     } catch (e) {
       console.error('Load failed:', e);
+      setErrorMessage('Unable to load saved game.');
     }
   };
 
@@ -274,11 +309,11 @@ export default function StrategoPanel() {
     const cell = board[row][col];
 
     if (setupPhase) {
-      if (isDeploymentCell(row, col) && cell === '.') {
+      if (isDeploymentCell(row) && cell === '.') {
         await placePieceOnBoard(row, col);
         return;
       }
-      if (isDeploymentCell(row, col) && isOwnCell(cell)) {
+      if (isDeploymentCell(row) && isOwnCell(cell)) {
         await removePieceFromBoard(row, col);
         return;
       }
@@ -300,8 +335,12 @@ export default function StrategoPanel() {
           }
           setSelected(null);
           setValidMoves([]);
+          if (data?.error) {
+            setErrorMessage(data.error);
+          }
         } catch (e) {
           console.error('Move failed:', e);
+          setErrorMessage('Unable to move piece.');
         }
         return;
       }
@@ -317,25 +356,22 @@ export default function StrategoPanel() {
     }
   };
 
-  const isHighlighted = (row: number, col: number) =>
-    selected?.row === row && selected?.col === col;
+  const isHighlighted = (row: number, col: number) => selected?.row === row && selected?.col === col;
+  const isMoveTarget = (row: number, col: number) => validMoves.some((move) => move.row === row && move.col === col);
 
-  const isMoveTarget = (row: number, col: number) =>
-    validMoves.some((move) => move.row === row && move.col === col);
-
-  const revealRules = useMemo(() => {
-    return [
+  const revealRules = useMemo(
+    () => [
       'Only your own pieces are visible. Sarah only sees her side and the enemy pieces she has uncovered in combat.',
       'Pieces move one square orthogonally. Flags cannot move.',
       'When opposing pieces meet, the higher-ranking piece wins and remains. Equal strength removes both.',
       'Spy can defeat the Marshal (10) when attacking, otherwise it loses.',
       'Capture the enemy flag to win, or leave Sarah with no legal moves.',
-    ];
-  }, []);
+    ],
+    [],
+  );
 
   const renderPiece = (cell: string) => {
-    if (cell === '.') return null;
-    if (cell === '##') return null;
+    if (cell === '.' || cell === '##') return null;
     if (cell === 'b?') return <span className="text-slate-400">?</span>;
     const code = getCode(cell);
     return <span className="font-semibold">{pieceLabels[code] || code}</span>;
@@ -391,9 +427,11 @@ export default function StrategoPanel() {
             className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white"
           >
             {presetOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-                setDeploymentCounts(newState.deployment_counts || deploymentCounts);
-                setSetupPhase(newState.setup_phase || false);
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3">
           <div className="text-[11px] text-slate-400 mb-2">Board Size</div>
@@ -416,13 +454,18 @@ export default function StrategoPanel() {
               disabled={preset !== 'custom'}
               className="w-1/2 rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-white"
             />
-                setDeploymentCounts(data.deployment_counts || deploymentCounts);
-                setSetupPhase(data.setup_phase || false);
+          </div>
           <div className="mt-2 text-[11px] text-slate-500">Custom mode supports larger or smaller boards.</div>
         </div>
         <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3">
           <div className="text-[11px] text-slate-400 mb-2">Map Details</div>
-          <div className="text-sm text-white">{boardConfig?.preset === 'classic' ? 'Classic lakes and bomb setup' : boardConfig?.preset === 'open' ? 'Open field, no lakes' : 'Custom board'}</div>
+          <div className="text-sm text-white">
+            {boardConfig?.preset === 'classic'
+              ? 'Classic lakes and bomb setup'
+              : boardConfig?.preset === 'open'
+              ? 'Open field, no lakes'
+              : 'Custom board'}
+          </div>
           <div className="mt-2 text-slate-400">{boardConfig?.rows}×{boardConfig?.columns} board</div>
           <div className="mt-2 text-slate-400">{boardConfig?.obstacles?.length || 0} lake squares</div>
         </div>
@@ -504,7 +547,12 @@ export default function StrategoPanel() {
               <div className="text-sm font-semibold text-white">Deployment Phase</div>
               <div className="text-xs text-slate-400">Place remaining pieces into the last {getDeploymentRows()} rows of the board.</div>
             </div>
-            <Button onClick={beginBattle} size="sm" className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30" disabled={Object.values(deploymentCounts).some((count) => count > 0)}>
+            <Button
+              onClick={beginBattle}
+              size="sm"
+              className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30"
+              disabled={Object.values(deploymentCounts).some((count) => count > 0)}
+            >
               Begin Battle
             </Button>
           </div>
@@ -522,8 +570,12 @@ export default function StrategoPanel() {
               </button>
             ))}
           </div>
-          <div className="text-xs text-slate-400">Selected: <span className="text-white">{pieceNames[selectedSetupPiece]}</span> ({deploymentCounts[selectedSetupPiece] ?? 0} left)</div>
-          {errorMessage && <div className="mt-3 rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-rose-200">{errorMessage}</div>}
+          <div className="text-xs text-slate-400">
+            Selected: <span className="text-white">{pieceNames[selectedSetupPiece]}</span> ({deploymentCounts[selectedSetupPiece] ?? 0} left)
+          </div>
+          {errorMessage && (
+            <div className="mt-3 rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-rose-200">{errorMessage}</div>
+          )}
         </div>
       )}
 
@@ -543,33 +595,35 @@ export default function StrategoPanel() {
               const isSelected = isHighlighted(rowIndex, colIndex);
               const canMove = isMoveTarget(rowIndex, colIndex);
               const isDark = (rowIndex + colIndex) % 2 === 1;
-              const isDeploymentSquare = setupPhase && isDeploymentCell(rowIndex, colIndex);
+              const isDeploymentSquare = setupPhase && isDeploymentCell(rowIndex);
               const cellBg = cell === '##'
                 ? 'bg-sky-900/80'
                 : isDeploymentSquare
-                  ? 'bg-amber-950/80'
-                  : isDark
-                    ? 'bg-slate-900/70'
-                    : 'bg-slate-800/80';
+                ? 'bg-amber-950/80'
+                : isDark
+                ? 'bg-slate-900/70'
+                : 'bg-slate-800/80';
               return (
                 <button
                   key={`${rowIndex}-${colIndex}`}
                   type="button"
                   onClick={() => handleCellClick(rowIndex, colIndex)}
-                  className={
-                    `relative aspect-square w-full rounded-none border-none p-0 text-xs text-center transition ${cellBg} ${
-                      isSelected ? 'ring-2 ring-cyan-400/80' : ''
-                    } ${canMove ? 'ring-1 ring-emerald-400/70' : ''} ${isDeploymentSquare ? 'hover:bg-amber-500/10' : 'hover:brightness-110'}`
-                  }
+                  className={`relative aspect-square w-full rounded-none border-none p-0 text-xs text-center transition ${cellBg} ${
+                    isSelected ? 'ring-2 ring-cyan-400/80' : ''
+                  } ${canMove ? 'ring-1 ring-emerald-400/70' : ''} ${isDeploymentSquare ? 'hover:bg-amber-500/10' : 'hover:brightness-110'}`}
                 >
                   <div className="flex h-full flex-col items-center justify-center">
                     <span className={getPieceClass(cell)}>{renderPiece(cell)}</span>
                   </div>
                   {cell === '##' && <div className="absolute inset-0 bg-sky-800/40" />}
-                  {canMove && cell === '.' && <div className="absolute inset-0 flex items-center justify-center"><span className="h-2 w-2 rounded-full bg-emerald-400/80" /></div>}
+                  {canMove && cell === '.' && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400/80" />
+                    </div>
+                  )}
                 </button>
               );
-            })
+            }),
           )}
         </div>
 
@@ -586,7 +640,7 @@ export default function StrategoPanel() {
           <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3">
             <div className="text-[11px] text-slate-400">Status</div>
             <div className="mt-1 text-sm font-semibold text-white">
-              {gameOver ? winner === 'white' ? 'You won' : 'Sarah won' : 'In progress'}
+              {gameOver ? (winner === 'white' ? 'You won' : 'Sarah won') : 'In progress'}
             </div>
           </div>
         </div>

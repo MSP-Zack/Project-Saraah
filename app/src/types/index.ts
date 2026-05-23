@@ -150,6 +150,8 @@ export interface AppState {
   sttEnabled: boolean;
   screenVisionEnabled: boolean;
   webcamVisionEnabled: boolean;
+  webcamVisionDescription: string;
+  webcamVisionTimestamp: string;
   thinkingMode: boolean;
   proactiveMode: boolean;
   rpMode: boolean;

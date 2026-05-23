@@ -35,6 +35,7 @@ from core.memory_engine import MemoryEngine
 from core.permission_manager import PermissionManager
 from core.action_engine import ActionEngine
 from core.vrm_action_engine import VRMActionEngine
+from core.image_generation.vision import ImageUnderstandingSystem
 from plugins.plugin_manager import PluginManager
 from core.ebook_reader import EbookReader
 from plugins.ebook_reader import PremiumEbookReader
@@ -61,6 +62,7 @@ sarah_brain: Optional[LLMBrain] = None
 tts_engine: Optional[TTSEngine] = None
 stt_engine: Optional[STTEngine] = None
 vision_engine: Optional[VisionEngine] = None
+vision_analyzer: Optional[ImageUnderstandingSystem] = None
 screen_engine: Optional[ScreenEngine] = None
 memory_engine: Optional[MemoryEngine] = None
 permission_manager: Optional[PermissionManager] = None
@@ -68,6 +70,7 @@ action_engine: Optional[ActionEngine] = None
 vrm_actions: Optional[VRMActionEngine] = None
 plugin_manager: Optional[PluginManager] = None
 ebook_reader: Optional[PremiumEbookReader] = None
+webcam_vision_task: Optional[asyncio.Task] = None
 diary_system = None  # Advanced diary system
 
 # WebSocket connections
@@ -77,6 +80,10 @@ connected_clients: list = []
 runtime_state = {
     "screen_vision_enabled": False,
     "webcam_vision_enabled": False,
+    "webcam_vision_model": "liquidai/LFM2.5-VL-1.6B-GGUF",
+    "webcam_vision_refresh": 1.0,
+    "latest_webcam_vision_description": "",
+    "webcam_vision_last_updated": None,
     "thinking_mode": False,
     "proactive_mode": True,
     "rp_mode": False,
@@ -122,6 +129,11 @@ def initialize():
     from core.advanced_diary import AdvancedDiarySystem
     diary_system = AdvancedDiarySystem()
     print(f"[INIT]: Advanced diary system ready - {diary_system.get_stats()['total_entries']} private entries.")
+
+    # Vision analyzer for webcam and screen description
+    global vision_analyzer
+    vision_analyzer = ImageUnderstandingSystem()
+    print("[INIT]: Vision analyzer ready.")
     
     # LLM Brain
     api_key = os.environ.get("GEMINI_API_KEY", "")
@@ -1976,10 +1988,18 @@ async def handle_websocket_message(ws: WebSocket, data: dict):
     elif msg_type == "toggle_webcam_vision":
         runtime_state["webcam_vision_enabled"] = data.get("enabled", False)
         if runtime_state["webcam_vision_enabled"]:
-            vision_engine.start_webcam()
+            started = vision_engine.start_webcam() if vision_engine else False
+            if started:
+                await start_webcam_vision_monitor()
+                await ws.send_json({"action": "system", "text": "Webcam vision enabled and live monitoring started."})
+            else:
+                runtime_state["webcam_vision_enabled"] = False
+                await ws.send_json({"action": "system", "text": "Failed to start webcam vision. Please check your webcam and try again."})
         else:
-            vision_engine.stop_webcam()
-        await ws.send_json({"action": "system", "text": f"Webcam vision {'enabled' if runtime_state['webcam_vision_enabled'] else 'disabled'}"})
+            if vision_engine:
+                vision_engine.stop_webcam()
+            await stop_webcam_vision_monitor()
+            await ws.send_json({"action": "system", "text": "Webcam vision disabled."})
     
     elif msg_type == "screen_capture":
         await handle_screen_capture(ws)
@@ -1999,6 +2019,7 @@ async def handle_websocket_message(ws: WebSocket, data: dict):
             'params': params,
             'time': now_iso
         })
+
         runtime_state['last_manual_action_time'] = now_iso
 
         # Immediately broadcast to clients to trigger the animation locally
@@ -2064,53 +2085,88 @@ async def handle_websocket_message(ws: WebSocket, data: dict):
                     print(f"[VRM MANUAL NOTIFY]: Error: {e}")
 
             manual_vrm_notify_task = asyncio.create_task(_delayed_notify())
-    
-    elif msg_type == "thinking_mode":
-        runtime_state["thinking_mode"] = data.get("enabled", False)
-        if sarah_brain:
-            sarah_brain.thinking_mode = runtime_state["thinking_mode"]
-    
-    elif msg_type == "proactive_mode":
-        runtime_state["proactive_mode"] = data.get("enabled", False)
-    
-    elif msg_type == "voice_profile":
-        if tts_engine:
-            tts_engine.set_profile(data.get("profile", "default"))
-    
-    elif msg_type == "config_update":
-        cfg = data.get("config", {})
-        if "system_prompt" in cfg and sarah_brain:
-            sarah_brain.set_system_prompt(cfg["system_prompt"])
-        if "voice_profile" in cfg and tts_engine:
-            tts_engine.set_profile(cfg["voice_profile"])
-            runtime_state["current_voice_profile"] = cfg["voice_profile"]
-        if "thinking_mode" in cfg:
-            runtime_state["thinking_mode"] = cfg["thinking_mode"]
-            if sarah_brain:
-                sarah_brain.thinking_mode = cfg["thinking_mode"]
-        if "proactive_mode" in cfg:
-            runtime_state["proactive_mode"] = cfg["proactive_mode"]
-        if "rp_mode" in cfg:
-            runtime_state["rp_mode"] = cfg["rp_mode"]
-            if sarah_brain:
-                sarah_brain.rp_mode = cfg["rp_mode"]
 
-        if "vrm_manual_hidden" in cfg:
-            runtime_state["vrm_manual_hidden"] = bool(cfg["vrm_manual_hidden"])
-    
-    elif msg_type == "tool_execute":
-        await handle_tool_execute(ws, data)
-    
-    elif msg_type == "pet_action":
-        await handle_pet_action(ws, data)
-    
-    elif msg_type == "chess_move":
-        await handle_chess_move(ws, data)
-    
-    elif msg_type == "editor_action":
-        await handle_editor_action(ws, data)
-    elif msg_type == "image_action":
-        await handle_image_action(ws, data)
+async def get_huggingface_api_key() -> Optional[str]:
+    """Retrieve the HuggingFace API key from image settings or environment."""
+    if plugin_manager:
+        plugin = plugin_manager.get_plugin("image_generation")
+        if plugin and hasattr(plugin, "get_settings"):
+            try:
+                settings = await plugin.get_settings()
+                if settings.get("huggingface_api_key"):
+                    return settings.get("huggingface_api_key")
+            except Exception:
+                pass
+    return os.getenv("HUGGINGFACE_API_KEY")
+
+async def generate_webcam_description(frame_b64: str) -> str:
+    """Generate a short description for a webcam frame."""
+    if not vision_analyzer:
+        return ""
+
+    try:
+        frame_bytes = base64.b64decode(frame_b64)
+        hf_key = await get_huggingface_api_key()
+        model = runtime_state.get("webcam_vision_model") or ""
+        if hf_key and model:
+            return await vision_analyzer.analyzer.get_image_description(frame_bytes, huggingface_model=model, huggingface_api_key=hf_key)
+        return await vision_analyzer.analyzer.get_image_description(frame_bytes)
+    except Exception as e:
+        print(f"[WEB CAM VISION]: Description generation failed: {e}")
+        return ""
+
+async def start_webcam_vision_monitor():
+    """Start the background webcam vision monitor if not already running."""
+    global webcam_vision_task
+    if webcam_vision_task and not webcam_vision_task.done():
+        return
+
+    async def monitor():
+        last_description = ""
+        while runtime_state.get("webcam_vision_enabled", False):
+            try:
+                if vision_engine and vision_engine.is_webcam_active:
+                    frame_b64 = vision_engine.capture_frame(quality=60, max_size=640)
+                    if frame_b64:
+                        description = await generate_webcam_description(frame_b64)
+                        if description:
+                            if description != last_description:
+                                last_description = description
+                                runtime_state["latest_webcam_vision_description"] = description
+                                runtime_state["webcam_vision_last_updated"] = datetime.now().isoformat()
+                                await broadcast_message({
+                                    "action": "vision_update",
+                                    "vision_type": "webcam",
+                                    "description": description,
+                                    "timestamp": runtime_state["webcam_vision_last_updated"]
+                                })
+                else:
+                    await broadcast_message({
+                        "action": "system",
+                        "text": "Webcam vision is enabled but the webcam is not active. Retrying..."
+                    })
+                    if vision_engine and not vision_engine.start_webcam():
+                        await asyncio.sleep(2)
+                        continue
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"[WEB CAM VISION]: Monitor error: {e}")
+
+            await asyncio.sleep(runtime_state.get("webcam_vision_refresh", 1.0))
+
+    webcam_vision_task = asyncio.create_task(monitor())
+
+async def stop_webcam_vision_monitor():
+    """Stop the background webcam vision monitor task."""
+    global webcam_vision_task
+    if webcam_vision_task and not webcam_vision_task.done():
+        webcam_vision_task.cancel()
+        try:
+            await webcam_vision_task
+        except asyncio.CancelledError:
+            pass
+    webcam_vision_task = None
 
 async def handle_chat_message(ws: WebSocket, data: dict):
     """Process a text chat message."""

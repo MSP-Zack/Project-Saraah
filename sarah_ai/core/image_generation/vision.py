@@ -137,12 +137,17 @@ class ImageVisionAnalyzer:
         except:
             return 0.5
     
-    async def get_image_description(self, image_data: bytes) -> str:
+    async def get_image_description(self, image_data: bytes, huggingface_model: Optional[str] = None, huggingface_api_key: Optional[str] = None) -> str:
         """
-        Get a natural language description of the image
-        This would integrate with a vision model like CLIP or similar
+        Get a natural language description of the image.
+        Uses Hugging Face vision captioning if configured, otherwise falls back to local analysis.
         """
         try:
+            if huggingface_model and huggingface_api_key:
+                hf_description = await self._get_huggingface_description(image_data, huggingface_model, huggingface_api_key)
+                if hf_description:
+                    return hf_description
+
             analysis = await self.analyze_image(image_data, "detailed")
             
             if "error" in analysis:
@@ -181,6 +186,56 @@ class ImageVisionAnalyzer:
         except Exception as e:
             print(f"[VISION]: Failed to generate description: {e}")
             return "Image analysis unavailable"
+
+    async def _get_huggingface_description(self, image_data: bytes, model: str, api_key: str) -> str:
+        """
+        Use the Hugging Face Inference API to get a caption or description for an image.
+        """
+        try:
+            import requests
+
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Accept": "application/json",
+                "Content-Type": "application/octet-stream"
+            }
+            url = f"https://api-inference.huggingface.co/models/{model}"
+
+            def hf_request():
+                return requests.post(url, headers=headers, data=image_data, timeout=90)
+
+            response = await asyncio.to_thread(hf_request)
+            if response.status_code != 200:
+                print(f"[VISION]: Hugging Face model {model} returned {response.status_code}: {response.text}")
+                return ""
+
+            result = response.json()
+            if isinstance(result, dict):
+                if "generated_text" in result and result["generated_text"]:
+                    return result["generated_text"].strip()
+                if "text" in result and result["text"]:
+                    return result["text"].strip()
+                if "error" in result:
+                    print(f"[VISION]: Hugging Face vision error: {result['error']}")
+                    return ""
+
+            if isinstance(result, list) and result:
+                first = result[0]
+                if isinstance(first, dict):
+                    if "generated_text" in first and first["generated_text"]:
+                        return first["generated_text"].strip()
+                    if "text" in first and first["text"]:
+                        return first["text"].strip()
+                elif isinstance(first, str):
+                    return first.strip()
+
+            if isinstance(result, str):
+                return result.strip()
+
+            return ""
+        except Exception as e:
+            print(f"[VISION]: Hugging Face request failed: {e}")
+            return ""
     
     async def _rgb_to_color_name(self, rgb: tuple) -> str:
         """Convert RGB to color name"""

@@ -134,6 +134,11 @@ export function useWebSocket() {
         store.setActiveDocument(data.result.document);
         store.setEditorContent(data.result.document.content);
       }
+    } else if (data.action === 'vision_update') {
+      if (data.vision_type === 'webcam') {
+        store.setWebcamVisionDescription(data.description || '');
+        store.setWebcamVisionTimestamp(data.timestamp || new Date().toISOString());
+      }
     } else if (data.action === 'tool_result') {
       // Show tool result in chat
       if (data.result) {

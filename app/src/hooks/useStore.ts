@@ -12,6 +12,8 @@ interface StoreState extends AppState {
   setSttEnabled: (enabled: boolean) => void;
   setScreenVisionEnabled: (enabled: boolean) => void;
   setWebcamVisionEnabled: (enabled: boolean) => void;
+  setWebcamVisionDescription: (description: string) => void;
+  setWebcamVisionTimestamp: (timestamp: string) => void;
   setThinkingMode: (enabled: boolean) => void;
   setProactiveMode: (enabled: boolean) => void;
   setRpMode: (enabled: boolean) => void;
@@ -44,6 +46,8 @@ export const useStore = create<StoreState>((set) => ({
   sttEnabled: true,
   screenVisionEnabled: false,
   webcamVisionEnabled: false,
+  webcamVisionDescription: '',
+  webcamVisionTimestamp: '',
   thinkingMode: false,
   proactiveMode: true,
   rpMode: false,
@@ -85,6 +89,8 @@ export const useStore = create<StoreState>((set) => ({
   setSttEnabled: (enabled) => set({ sttEnabled: enabled }),
   setScreenVisionEnabled: (enabled) => set({ screenVisionEnabled: enabled }),
   setWebcamVisionEnabled: (enabled) => set({ webcamVisionEnabled: enabled }),
+  setWebcamVisionDescription: (description) => set({ webcamVisionDescription: description }),
+  setWebcamVisionTimestamp: (timestamp) => set({ webcamVisionTimestamp: timestamp }),
   setThinkingMode: (enabled) => set({ thinkingMode: enabled }),
   setProactiveMode: (enabled) => set({ proactiveMode: enabled }),
   setRpMode: (enabled) => set({ rpMode: enabled }),
