@@ -20,10 +20,15 @@ import EbooksPanel from '@/components/EbooksPanel';
 import ToolsPanel from '@/components/ToolsPanel';
 import VRMActionsPanel from '@/components/VRMActionsPanel';
 import DiaryPanel from '@/components/DiaryPanel';
+import PerceptionPanel from '@/components/PerceptionPanel';
+import FBXTestPanel from '@/components/FBXTestPanel';
+import SelfModelPanel from '@/components/SelfModelPanel';
+import GoalsPanel from '@/components/GoalsPanel';
+import HeartbeatPanel from '@/components/HeartbeatPanel';
 import { Button } from '@/components/ui/button';
 import { 
-  MessageSquare, Settings, Shield, Brain, Smile, Swords, Heart, 
-  Edit3, Menu, X, Sparkles, Image as ImageIcon, FileText, BookOpen, Eye
+  MessageSquare, Settings, Shield, Brain, Smile, Swords, Heart, Target, UserRound, Activity,
+  Edit3, Menu, X, Sparkles, Image as ImageIcon, FileText, BookOpen, Eye, Box
 } from 'lucide-react';
 
 interface Tab {
@@ -39,6 +44,11 @@ const tabs: Tab[] = [
   { id: 'permissions', label: 'Permissions', icon: <Shield className="w-4 h-4" />, component: PermissionPanel },
   { id: 'memory', label: 'Memory', icon: <Brain className="w-4 h-4" />, component: MemoryPanel },
   { id: 'diary', label: 'Diary', icon: <Eye className="w-4 h-4" />, component: DiaryPanel },
+  { id: 'perception', label: 'Perception', icon: <Eye className="w-4 h-4" />, component: PerceptionPanel },
+  { id: 'fbx_tests', label: 'FBX Tests', icon: <Box className="w-4 h-4" />, component: FBXTestPanel },
+  { id: 'self_model', label: 'Self', icon: <UserRound className="w-4 h-4" />, component: SelfModelPanel },
+  { id: 'goals', label: 'Goals', icon: <Target className="w-4 h-4" />, component: GoalsPanel },
+  { id: 'heartbeat', label: 'Heartbeat', icon: <Activity className="w-4 h-4" />, component: HeartbeatPanel },
   { id: 'notes', label: 'Notes', icon: <FileText className="w-4 h-4" />, component: NotesPanel },
   { id: 'tools', label: 'Tools', icon: <Sparkles className="w-4 h-4" />, component: ToolsPanel },
   { id: 'vrm_actions', label: 'VRM', icon: <Smile className="w-4 h-4" />, component: VRMActionsPanel },

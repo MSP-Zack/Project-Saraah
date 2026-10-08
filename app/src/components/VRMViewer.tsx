@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { VRMLoaderPlugin, VRM, VRMExpressionPresetName } from '@pixiv/three-vrm';
 import { useStore } from '@/hooks/useStore';
@@ -15,6 +16,7 @@ export default function VRMViewer() {
     clock: THREE.Clock;
     vrm: VRM | null;
     mixer: THREE.AnimationMixer | null;
+    fbxPreview: { root: THREE.Group; mixer: THREE.AnimationMixer } | null;
     raycaster: THREE.Raycaster;
     mouse: THREE.Vector2;
     lipSyncTarget: number;
@@ -124,6 +126,7 @@ export default function VRMViewer() {
       clock: new THREE.Clock(),
       vrm: null,
       mixer: null,
+      fbxPreview: null,
       raycaster: new THREE.Raycaster(),
       mouse: new THREE.Vector2(),
       lipSyncTarget: 0,
@@ -155,6 +158,8 @@ export default function VRMViewer() {
     window.addEventListener('vrm-outfit-change', onOutfitChange as EventListener);
     // Pet locomotion events (detail: { x, y, z, speed })
     window.addEventListener('pet-move', onPetMove as EventListener);
+    window.addEventListener('fbx-animation-test', onFBXAnimationTest as EventListener);
+    window.addEventListener('fbx-animation-clear', onFBXAnimationClear as EventListener);
 
     // Click handler for body interactions
     canvas.addEventListener('click', onCanvasClick);
@@ -165,6 +170,9 @@ export default function VRMViewer() {
       window.removeEventListener('vrm-animation', onAnimationEvent as EventListener);
       window.removeEventListener('vrm-lipsync', onLipSyncEvent as EventListener);
       window.removeEventListener('vrm-outfit-change', onOutfitChange as EventListener);
+      window.removeEventListener('pet-move', onPetMove as EventListener);
+      window.removeEventListener('fbx-animation-test', onFBXAnimationTest as EventListener);
+      window.removeEventListener('fbx-animation-clear', onFBXAnimationClear as EventListener);
       canvas.removeEventListener('click', onCanvasClick);
       renderer.dispose();
     };
@@ -434,6 +442,10 @@ export default function VRMViewer() {
       }
     }
 
+    if (s.fbxPreview) {
+      s.fbxPreview.mixer.update(delta);
+    }
+
     // Animate particles
     s.scene.traverse((obj: THREE.Object3D) => {
       if (obj instanceof THREE.Points) {
@@ -569,6 +581,61 @@ export default function VRMViewer() {
       startTime: sceneRef.current.clock.getElapsedTime(),
       duration: durationMap[anim] || 1
     });
+  };
+
+  const disposeFBXPreview = () => {
+    const state = sceneRef.current;
+    if (!state?.fbxPreview) return;
+    state.scene.remove(state.fbxPreview.root);
+    state.fbxPreview.root.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (mesh.geometry) mesh.geometry.dispose();
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      materials.forEach((material) => material?.dispose());
+    });
+    state.fbxPreview = null;
+  };
+
+  const onFBXAnimationTest = (e: CustomEvent) => {
+    if (!sceneRef.current) return;
+    const detail = e.detail as { url?: string; clipName?: string };
+    if (!detail?.url) return;
+
+    const loader = new FBXLoader();
+    loader.load(
+      detail.url,
+      (object) => {
+        const state = sceneRef.current;
+        if (!state) return;
+        disposeFBXPreview();
+
+        const bounds = new THREE.Box3().setFromObject(object);
+        const size = bounds.getSize(new THREE.Vector3());
+        const center = bounds.getCenter(new THREE.Vector3());
+        const scale = size.y > 0 ? 2.4 / size.y : 0.01;
+        object.scale.setScalar(scale);
+        object.position.set(-center.x * scale, -bounds.min.y * scale, -center.z * scale);
+
+        const mixer = new THREE.AnimationMixer(object);
+        const clip = object.animations.find((candidate) => candidate.name === detail.clipName) || object.animations[0];
+        if (clip) {
+          mixer.clipAction(clip).reset().setLoop(THREE.LoopRepeat, Infinity).play();
+        }
+        state.fbxPreview = { root: object, mixer };
+        state.scene.add(object);
+        if (state.vrm) state.vrm.scene.visible = false;
+        console.log('[FBX TEST]: Playing', clip?.name || 'no animation clip', detail.url);
+      },
+      undefined,
+      (error) => console.error('[FBX TEST]: Load error', error),
+    );
+  };
+
+  const onFBXAnimationClear = () => {
+    const state = sceneRef.current;
+    if (!state) return;
+    disposeFBXPreview();
+    if (state.vrm) state.vrm.scene.visible = true;
   };
 
   const onLipSyncEvent = (e: CustomEvent) => {

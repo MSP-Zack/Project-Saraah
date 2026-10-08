@@ -11,10 +11,16 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
 
-from ..core.ebook_reader import EbookReader
-from ..core.memory_engine import MemoryEngine
-from ..core.vrm_action_engine import VRMActionEngine
-from ..core.tts_engine import TTSEngine
+try:
+    from ..core.ebook_reader import EbookReader
+    from ..core.memory_engine import MemoryEngine
+    from ..core.vrm_action_engine import VRMActionEngine
+    from ..core.tts_engine import TTSEngine
+except ImportError:
+    from core.ebook_reader import EbookReader
+    from core.memory_engine import MemoryEngine
+    from core.vrm_action_engine import VRMActionEngine
+    from core.tts_engine import TTSEngine
 
 
 @dataclass
@@ -524,5 +530,4 @@ class PremiumEbookReader:
     def extract_text(self, ebook_id: str, start_page: Optional[int] = None,
                     end_page: Optional[int] = None) -> str:
         """Extract text (delegate to core reader)"""
-        return self.reader.extract_text(ebook_id, start_page, end_page)</content>
-<parameter name="filePath">/workspaces/Project-Saraah/sarah_ai/plugins/ebook_reader.py
+        return self.reader.extract_text(ebook_id, start_page, end_page)

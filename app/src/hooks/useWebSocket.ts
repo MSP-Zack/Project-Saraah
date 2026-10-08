@@ -138,6 +138,9 @@ export function useWebSocket() {
       if (data.vision_type === 'webcam') {
         store.setWebcamVisionDescription(data.description || '');
         store.setWebcamVisionTimestamp(data.timestamp || new Date().toISOString());
+        if (data.observation) {
+          store.addVisionObservation(data.observation);
+        }
       }
     } else if (data.action === 'tool_result') {
       // Show tool result in chat

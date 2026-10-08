@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { AppState, ChatMessage, ChessBoardState, StrategoBoardState, PetState, PermissionMap, EditorDocument } from '@/types';
+import type { AppState, ChatMessage, ChessBoardState, StrategoBoardState, PetState, PermissionMap, EditorDocument, VisionObservation } from '@/types';
 
 interface StoreState extends AppState {
   // Actions
@@ -14,6 +14,8 @@ interface StoreState extends AppState {
   setWebcamVisionEnabled: (enabled: boolean) => void;
   setWebcamVisionDescription: (description: string) => void;
   setWebcamVisionTimestamp: (timestamp: string) => void;
+  setVisionObservations: (observations: VisionObservation[]) => void;
+  addVisionObservation: (observation: VisionObservation) => void;
   setThinkingMode: (enabled: boolean) => void;
   setProactiveMode: (enabled: boolean) => void;
   setRpMode: (enabled: boolean) => void;
@@ -48,6 +50,7 @@ export const useStore = create<StoreState>((set) => ({
   webcamVisionEnabled: false,
   webcamVisionDescription: '',
   webcamVisionTimestamp: '',
+  visionObservations: [],
   thinkingMode: false,
   proactiveMode: true,
   rpMode: false,
@@ -91,6 +94,10 @@ export const useStore = create<StoreState>((set) => ({
   setWebcamVisionEnabled: (enabled) => set({ webcamVisionEnabled: enabled }),
   setWebcamVisionDescription: (description) => set({ webcamVisionDescription: description }),
   setWebcamVisionTimestamp: (timestamp) => set({ webcamVisionTimestamp: timestamp }),
+  setVisionObservations: (observations) => set({ visionObservations: observations }),
+  addVisionObservation: (observation) => set((state) => ({
+    visionObservations: [...state.visionObservations, observation].slice(-100),
+  })),
   setThinkingMode: (enabled) => set({ thinkingMode: enabled }),
   setProactiveMode: (enabled) => set({ proactiveMode: enabled }),
   setRpMode: (enabled) => set({ rpMode: enabled }),

@@ -17,12 +17,16 @@ class LLMBrain:
                  memory_engine = None,
                  permission_manager = None,
                  vrm_actions = None,
-                 diary_system = None):
+                 diary_system = None,
+                 self_model = None,
+                 goal_engine = None):
         self.mode = mode
         self.memory_engine = memory_engine
         self.permissions = permission_manager
         self.vrm_actions = vrm_actions
         self.diary_system = diary_system
+        self.self_model = self_model
+        self.goal_engine = goal_engine
         
         # Thinking mode - expose reasoning to user
         self.thinking_mode = False
@@ -182,7 +186,7 @@ You have a thinking mode. When it's enabled, share your reasoning process in <th
                 "type": "function",
                 "function": {
                     "name": "memory_manage",
-                    "description": "Add facts to long-term memory or search past conversations",
+                    "description": "Actively curate long-term memory. Save only distinct, durable facts, preferences, plans, or meaningful events; do not passively store ordinary chat noise. Search before saving when a fact may already exist.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -195,6 +199,27 @@ You have a thinking mode. When it's enabled, share your reasoning process in <th
                         "required": ["action"]
                     }
                 }
+            })
+
+            self.tools.append({
+                "type": "function",
+                "function": {
+                    "name": "goal_manage",
+                    "description": "Manage Sarah's active goals and progress. Use create only for durable, meaningful objectives; use update to append progress notes or change status.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": {"type": "string", "enum": ["create", "list", "update"]},
+                            "goal_id": {"type": "string"},
+                            "title": {"type": "string"},
+                            "description": {"type": "string"},
+                            "priority": {"type": "string", "enum": ["high", "medium", "low"]},
+                            "status": {"type": "string", "enum": ["active", "completed", "abandoned"]},
+                            "progress_note": {"type": "string"},
+                        },
+                        "required": ["action"],
+                    },
+                },
             })
 
         if self.permissions and self.permissions.is_enabled("diary_access"):
@@ -250,6 +275,10 @@ You have a thinking mode. When it's enabled, share your reasoning process in <th
             prompt += "\n\nROLEPLAY MODE: The user has enabled RP mode. Follow the RP instructions closely and maintain the selected persona unless explicitly told to exit RP."
         if self.vrm_actions:
             prompt += f"\n{self.vrm_actions.get_llm_action_guide()}"
+        if self.self_model:
+            prompt += f"\n\n{self.self_model.get_context()}"
+        if self.goal_engine:
+            prompt += f"\n\n{self.goal_engine.get_context()}"
         return prompt
     
     async def generate_response(self, 
@@ -275,6 +304,20 @@ You have a thinking mode. When it's enabled, share your reasoning process in <th
         if self.memory_engine:
             history = self.memory_engine.get_formatted_history(20)
             messages.extend(history)
+            if user_input and not is_proactive:
+                if hasattr(self.memory_engine, "get_relevant_memories_async"):
+                    recalled = await self.memory_engine.get_relevant_memories_async(user_input, limit=8)
+                else:
+                    recalled = self.memory_engine.get_relevant_memories(user_input, limit=8)
+                if recalled:
+                    memory_lines = [
+                        f"- {item.get('title', 'Memory')}: {item.get('content', '')}"
+                        for item in recalled
+                    ]
+                    messages.append({
+                        "role": "system",
+                        "content": "RELEVANT LONG-TERM MEMORIES (use only when genuinely relevant):\n" + "\n".join(memory_lines),
+                    })
         
         # Check for diary peek notifications
         if self.diary_system:
@@ -294,7 +337,7 @@ You have a thinking mode. When it's enabled, share your reasoning process in <th
                 self.diary_system.clear_peek_notification()
         
         # Add proactive prompt if needed
-        if is_proactive:
+        if is_proactive and not user_input.strip():
             user_input = "[SYSTEM: The user has been quiet. Initiate conversation naturally based on context.]"
         
         # Build user message with optional vision
@@ -319,21 +362,23 @@ You have a thinking mode. When it's enabled, share your reasoning process in <th
         # Determine which tools to include based on permissions
         available_tools = None
         if enable_tools and self.permissions:
+            tools_by_name = {
+                tool["function"]["name"]: tool for tool in self.tools
+            }
             perm_tools = []
-            if self.permissions.is_enabled("file_operations"):
-                perm_tools.append(self.tools[0])  # file_operation
-            if self.permissions.is_enabled("mouse_control"):
-                perm_tools.append(self.tools[1])  # mouse_control
-            if self.permissions.is_enabled("keyboard_control"):
-                perm_tools.append(self.tools[2])  # keyboard_control
-            if self.permissions.is_enabled("browser_control"):
-                perm_tools.append(self.tools[3])  # browser_control
-            if self.permissions.is_enabled("app_control"):
-                perm_tools.append(self.tools[4])  # app_control
-            if self.permissions.is_enabled("memory_edit"):
-                perm_tools.append(self.tools[5])  # memory_manage
-            if self.permissions.is_enabled("diary_access"):
-                perm_tools.append(self.tools[6])  # diary_manage
+            for permission, tool_name in (
+                ("file_operations", "file_operation"),
+                ("mouse_control", "mouse_control"),
+                ("keyboard_control", "keyboard_control"),
+                ("browser_control", "browser_control"),
+                ("app_control", "app_control"),
+                ("memory_edit", "memory_manage"),
+                ("diary_access", "diary_manage"),
+            ):
+                if self.permissions.is_enabled(permission) and tool_name in tools_by_name:
+                    perm_tools.append(tools_by_name[tool_name])
+            if self.permissions.is_enabled("memory_edit") and "goal_manage" in tools_by_name:
+                perm_tools.append(tools_by_name["goal_manage"])
             if perm_tools:
                 available_tools = perm_tools
         
@@ -440,10 +485,82 @@ You have a thinking mode. When it's enabled, share your reasoning process in <th
         
         result = {"tool": tool_name, "args": args, "success": False, "output": ""}
         
-        # This would be connected to the actual action engine in main.py
-        # For now, return the tool call info so main.py can execute it
-        result["success"] = True
-        result["output"] = f"Tool {tool_name} called with {args}"
+        if tool_name == "memory_manage" and self.memory_engine:
+            action = args.get("action", "")
+            if action == "add_fact":
+                category = str(args.get("category") or "general").strip()[:80]
+                content = str(args.get("content") or "").strip()
+                if not content:
+                    return {**result, "output": "No memory content was provided."}
+                self.memory_engine.add_fact(category, content)
+                result.update(success=True, output={"saved": True, "type": "fact", "category": category, "content": content})
+            elif action == "add_memory":
+                title = str(args.get("title") or "Untitled memory").strip()[:160]
+                content = str(args.get("content") or "").strip()
+                if not content:
+                    return {**result, "output": "No memory content was provided."}
+                importance = max(1, min(10, int(args.get("importance", 5))))
+                if hasattr(self.memory_engine, "add_memory_async"):
+                    await self.memory_engine.add_memory_async(title, content, importance)
+                else:
+                    self.memory_engine.add_memory(title, content, importance)
+                result.update(success=True, output={"saved": True, "type": "memory", "title": title, "importance": importance})
+            elif action == "search":
+                query = str(args.get("content") or "").strip()
+                matches = self.memory_engine.search_memories(query) if query else []
+                result.update(success=True, output={"results": matches[:10], "query": query})
+            else:
+                result["output"] = f"Unknown memory action: {action}"
+            return result
+
+        if tool_name == "diary_manage" and self.diary_system:
+            action = args.get("action", "")
+            if action == "write":
+                entry_id = self.diary_system.add_entry(
+                    str(args.get("content") or "").strip(),
+                    args.get("entry_type", "reflection"),
+                    args.get("mood", "neutral"),
+                )
+                result.update(success=True, output={"saved": True, "entry_id": entry_id})
+            elif action == "read":
+                entries = self.diary_system.read_entries(max(1, min(50, int(args.get("limit", 10)))))
+                result.update(success=True, output={"entries": entries})
+            elif action == "search":
+                query = str(args.get("query") or "").strip()
+                result.update(success=True, output={"entries": self.diary_system.search_entries(query), "query": query})
+            elif action == "reflect":
+                result.update(success=True, output={
+                    "recent_entries": self.diary_system.get_recent_entries(24),
+                    "context": self.diary_system.get_ai_context(),
+                })
+            else:
+                result["output"] = f"Unknown diary action: {action}"
+            return result
+
+        if tool_name == "goal_manage" and self.goal_engine:
+            action = args.get("action", "")
+            try:
+                if action == "create":
+                    goal = self.goal_engine.create_goal(
+                        args.get("title", ""), args.get("description", ""),
+                        args.get("priority", "medium"), source="sarah",
+                    )
+                    result.update(success=True, output=goal)
+                elif action == "list":
+                    result.update(success=True, output={"goals": self.goal_engine.list_goals(args.get("status"))})
+                elif action == "update":
+                    goal = self.goal_engine.update_goal(
+                        args.get("goal_id", ""), args.get("status"),
+                        args.get("priority"), args.get("progress_note"),
+                    )
+                    result.update(success=True, output=goal)
+                else:
+                    result["output"] = f"Unknown goal action: {action}"
+            except (TypeError, ValueError) as error:
+                result["output"] = str(error)
+            return result
+
+        result["output"] = f"Tool {tool_name} is not available in the brain execution context."
         
         return result
     

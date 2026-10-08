@@ -10,7 +10,7 @@ import asyncio
 import base64
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import uuid
 import shutil
 import time
@@ -36,6 +36,9 @@ from core.permission_manager import PermissionManager
 from core.action_engine import ActionEngine
 from core.vrm_action_engine import VRMActionEngine
 from core.image_generation.vision import ImageUnderstandingSystem
+from core.self_model import SelfModel
+from core.goal_engine import GoalEngine
+from core.heartbeat_engine import HeartbeatEngine
 from plugins.plugin_manager import PluginManager
 from core.ebook_reader import EbookReader
 from plugins.ebook_reader import PremiumEbookReader
@@ -63,6 +66,9 @@ tts_engine: Optional[TTSEngine] = None
 stt_engine: Optional[STTEngine] = None
 vision_engine: Optional[VisionEngine] = None
 vision_analyzer: Optional[ImageUnderstandingSystem] = None
+self_model: Optional[SelfModel] = None
+goal_engine: Optional[GoalEngine] = None
+heartbeat_engine: Optional[HeartbeatEngine] = None
 screen_engine: Optional[ScreenEngine] = None
 memory_engine: Optional[MemoryEngine] = None
 permission_manager: Optional[PermissionManager] = None
@@ -84,6 +90,7 @@ runtime_state = {
     "webcam_vision_refresh": 1.0,
     "latest_webcam_vision_description": "",
     "webcam_vision_last_updated": None,
+    "last_proactive_vision_at": None,
     "thinking_mode": False,
     "proactive_mode": True,
     "rp_mode": False,
@@ -106,7 +113,7 @@ def initialize():
     """Initialize all subsystems."""
     global sarah_brain, tts_engine, stt_engine, vision_engine
     global screen_engine, memory_engine, permission_manager
-    global action_engine, vrm_actions, plugin_manager
+    global action_engine, vrm_actions, plugin_manager, self_model, goal_engine, heartbeat_engine
     
     print("=" * 60)
     print("  SARAH AI COMPANION v2.0 - INITIALIZING")
@@ -119,6 +126,11 @@ def initialize():
     # Memory engine
     memory_engine = MemoryEngine()
     print(f"[INIT]: Memory loaded - {memory_engine.get_stats()}")
+
+    self_model = SelfModel()
+    goal_engine = GoalEngine()
+    heartbeat_engine = HeartbeatEngine()
+    print("[INIT]: Self-model, goal engine, and heartbeat engine ready.")
     
     # VRM action engine
     vrm_actions = VRMActionEngine()
@@ -151,7 +163,9 @@ def initialize():
         memory_engine=memory_engine,
         permission_manager=permission_manager,
         vrm_actions=vrm_actions,
-        diary_system=diary_system
+        diary_system=diary_system,
+        self_model=self_model,
+        goal_engine=goal_engine,
     )
     print("[INIT]: Sarah's brain online.")
     
@@ -224,9 +238,36 @@ class MemoryEdit(BaseModel):
     content: Optional[str] = None
     importance: Optional[int] = None
 
+class MemoryMerge(BaseModel):
+    canonical_id: int
+    duplicate_id: int
+    reason: str = "Reviewed semantic duplicate"
+
 class DiaryUpdate(BaseModel):
     action: str
     content: Optional[str] = None
+
+class SelfModelUpdate(BaseModel):
+    section: str
+    content: str
+    expected_revision: Optional[int] = None
+
+class GoalCreate(BaseModel):
+    title: str
+    description: str = ""
+    priority: str = "medium"
+    parent_id: Optional[str] = None
+
+class GoalUpdate(BaseModel):
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    progress_note: Optional[str] = None
+
+class HeartbeatUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    interval_minutes: Optional[int] = None
+    max_runs_per_day: Optional[int] = None
+    min_idle_minutes: Optional[int] = None
 
 class ConfigUpdate(BaseModel):
     system_prompt: Optional[str] = None
@@ -549,6 +590,137 @@ def search_memory(query: str):
     if memory_engine:
         return {"results": memory_engine.search_memories(query)}
     return {"success": False, "error": "Memory engine not initialized"}
+
+@app.get("/api/memory/duplicate-candidates")
+def get_memory_duplicate_candidates(threshold: float = 0.90, limit: int = 50):
+    """Return semantic duplicate candidates for explicit review."""
+    if memory_engine:
+        return {"candidates": memory_engine.find_semantic_duplicate_candidates(threshold, limit)}
+    return {"success": False, "error": "Memory engine not initialized"}
+
+@app.get("/api/memory/links")
+def get_memory_links(limit: int = 100):
+    """Return conservative semantic links between durable memories."""
+    if memory_engine:
+        return {"links": memory_engine.get_memory_links(limit)}
+    return {"success": False, "error": "Memory engine not initialized"}
+
+@app.post("/api/memory/merge")
+def merge_memory(merge: MemoryMerge):
+    """Soft-archive a reviewed semantic duplicate; never hard-delete it."""
+    if not memory_engine:
+        return {"success": False, "error": "Memory engine not initialized"}
+    try:
+        return {"success": True, "result": memory_engine.merge_memories(
+            merge.canonical_id, merge.duplicate_id, merge.reason
+        )}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+@app.post("/api/memory/embeddings/backfill")
+async def backfill_memory_embeddings(limit: int = 100):
+    """Explicitly index a bounded batch of existing memories."""
+    if not memory_engine:
+        return {"success": False, "error": "Memory engine not initialized"}
+    return {"success": True, "result": await memory_engine.backfill_embeddings(limit)}
+
+@app.get("/api/self-model")
+def get_self_model():
+    """Return Sarah's versioned self-model."""
+    return self_model.snapshot() if self_model else {"success": False, "error": "Self-model not initialized"}
+
+@app.put("/api/self-model")
+def update_self_model(update: SelfModelUpdate):
+    """Update one self-model section with optimistic revision protection."""
+    if not self_model:
+        return {"success": False, "error": "Self-model not initialized"}
+    try:
+        return {"success": True, "model": self_model.update_section(
+            update.section, update.content, source="user", expected_revision=update.expected_revision
+        )}
+    except ValueError as error:
+        raise HTTPException(status_code=409 if "revision conflict" in str(error) else 400, detail=str(error))
+
+@app.get("/api/goals")
+def get_goals(status: Optional[str] = "active"):
+    """Return Sarah's goals, including append-only progress journals."""
+    if not goal_engine:
+        return {"success": False, "error": "Goal engine not initialized"}
+    try:
+        return {"goals": goal_engine.list_goals(status)}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+@app.post("/api/goals")
+def create_goal(goal: GoalCreate):
+    if not goal_engine:
+        return {"success": False, "error": "Goal engine not initialized"}
+    try:
+        return {"success": True, "goal": goal_engine.create_goal(
+            goal.title, goal.description, goal.priority, goal.parent_id, source="user"
+        )}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+@app.patch("/api/goals/{goal_id}")
+def update_goal(goal_id: str, update: GoalUpdate):
+    if not goal_engine:
+        return {"success": False, "error": "Goal engine not initialized"}
+    try:
+        return {"success": True, "goal": goal_engine.update_goal(
+            goal_id, update.status, update.priority, update.progress_note
+        )}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+@app.get("/api/heartbeat")
+def get_heartbeat():
+    return heartbeat_engine.snapshot() if heartbeat_engine else {"success": False, "error": "Heartbeat engine not initialized"}
+
+@app.put("/api/heartbeat")
+def update_heartbeat(update: HeartbeatUpdate):
+    if not heartbeat_engine:
+        return {"success": False, "error": "Heartbeat engine not initialized"}
+    try:
+        return {"success": True, "heartbeat": heartbeat_engine.update_settings(
+            update.enabled, update.interval_minutes, update.max_runs_per_day, update.min_idle_minutes
+        )}
+    except (TypeError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+@app.post("/api/heartbeat/cancel")
+def cancel_heartbeat():
+    if not heartbeat_engine:
+        return {"success": False, "error": "Heartbeat engine not initialized"}
+    return {"success": True, "heartbeat": heartbeat_engine.request_cancel()}
+
+@app.get("/api/vision/observations")
+def get_vision_observations(limit: int = 100):
+    """Return recent persisted visual observations for the perception dashboard."""
+    if memory_engine:
+        return {"observations": memory_engine.get_vision_observations(limit)}
+    return {"success": False, "error": "Memory engine not initialized"}
+
+@app.get("/api/fbx-tests")
+def list_fbx_test_files():
+    """List temporary FBX files placed in the local test folder."""
+    fbx_dir = Path(__file__).parent / "static" / "fbx_tests"
+    fbx_dir.mkdir(parents=True, exist_ok=True)
+    files = sorted(
+        path for path in fbx_dir.iterdir()
+        if path.is_file() and path.suffix.lower() == ".fbx"
+    )
+    return {
+        "folder": "sarah_ai/static/fbx_tests",
+        "files": [
+            {
+                "name": path.name,
+                "url": f"/static/fbx_tests/{path.name}",
+                "size": path.stat().st_size,
+            }
+            for path in files
+        ],
+    }
 
 @app.get("/api/diary")
 def get_diary():
@@ -2115,6 +2287,39 @@ async def generate_webcam_description(frame_b64: str) -> str:
         print(f"[WEB CAM VISION]: Description generation failed: {e}")
         return ""
 
+async def maybe_proactively_comment_on_scene(description: str):
+    """Let Sarah comment on a changed scene at a restrained cadence."""
+    if not runtime_state.get("proactive_mode") or not sarah_brain:
+        return
+
+    last_comment = runtime_state.get("last_proactive_vision_at")
+    if last_comment:
+        elapsed = (datetime.now() - datetime.fromisoformat(last_comment)).total_seconds()
+        if elapsed < 30:
+            return
+
+    prompt = (
+        "A new webcam observation is available: "
+        f"{description}\n\n"
+        "If this is meaningfully relevant, make one brief, natural observation to the user. "
+        "Do not claim certainty about identity, emotion, or private details. "
+        "If it is ordinary or unchanged, reply with an empty string."
+    )
+    try:
+        result = await sarah_brain.generate_response(prompt, is_proactive=True, enable_tools=False)
+        response_text = (result.get("text") or "").strip()
+        if response_text:
+            runtime_state["last_proactive_vision_at"] = datetime.now().isoformat()
+            await broadcast_message({
+                "action": "reply",
+                "text": response_text,
+                "actions": result.get("actions", []),
+                "is_proactive": True,
+                "timestamp": datetime.now().isoformat(),
+            })
+    except Exception as e:
+        print(f"[WEB CAM VISION]: Proactive comment failed: {e}")
+
 async def start_webcam_vision_monitor():
     """Start the background webcam vision monitor if not already running."""
     global webcam_vision_task
@@ -2134,12 +2339,19 @@ async def start_webcam_vision_monitor():
                                 last_description = description
                                 runtime_state["latest_webcam_vision_description"] = description
                                 runtime_state["webcam_vision_last_updated"] = datetime.now().isoformat()
+                                observation = memory_engine.add_vision_observation(description, "webcam") if memory_engine else {
+                                    "timestamp": runtime_state["webcam_vision_last_updated"],
+                                    "source": "webcam",
+                                    "description": description,
+                                }
                                 await broadcast_message({
                                     "action": "vision_update",
                                     "vision_type": "webcam",
                                     "description": description,
-                                    "timestamp": runtime_state["webcam_vision_last_updated"]
+                                    "timestamp": runtime_state["webcam_vision_last_updated"],
+                                    "observation": observation,
                                 })
+                                await maybe_proactively_comment_on_scene(description)
                 else:
                     await broadcast_message({
                         "action": "system",
@@ -2176,6 +2388,13 @@ async def handle_chat_message(ws: WebSocket, data: dict):
     
     runtime_state["sarah_status"] = "thinking"
     runtime_state["last_activity"] = datetime.now().isoformat()
+
+    if runtime_state.get("webcam_vision_enabled") and runtime_state.get("latest_webcam_vision_description"):
+        user_text = (
+            "[CURRENT WEBCAM CONTEXT - treat as an uncertain observation, not verified fact]\n"
+            f"{runtime_state['latest_webcam_vision_description']}\n\n"
+            f"USER MESSAGE:\n{user_text}"
+        )
     
     # Capture images if vision is enabled
     images = []
@@ -2609,7 +2828,6 @@ async def proactive_chat_loop():
             runtime_state["sarah_status"] = "idle"
             runtime_state["last_activity"] = datetime.now().isoformat()
 
-
         async def pet_monitor():
             """Background task that monitors pet state and asks Sarah for suggestions when needed."""
             while True:
@@ -2734,6 +2952,113 @@ async def proactive_chat_loop():
             print(f"[PROACTIVE LOOP]: Error: {e}")
             await asyncio.sleep(60)  # Wait a minute before retrying
 
+async def memory_librarian_loop():
+    """Run Sarah's reversible memory maintenance pass once each night."""
+    try:
+        librarian_hour = max(0, min(23, int(os.getenv("SARAH_LIBRARIAN_HOUR", "3"))))
+    except ValueError:
+        librarian_hour = 3
+
+    while True:
+        await asyncio.sleep(60)
+        if not memory_engine:
+            continue
+
+        now = datetime.now()
+        if now.hour != librarian_hour or now.minute > 1:
+            continue
+
+        try:
+            result = memory_engine.run_librarian(now)
+            archived = result.get("result", {}).get("archived", 0)
+            if result.get("status") == "completed" and archived:
+                await broadcast_message({
+                    "action": "memory_librarian",
+                    "text": f"Nightly memory maintenance archived {archived} exact duplicate(s).",
+                    "result": result,
+                    "timestamp": now.isoformat(),
+                })
+        except Exception as e:
+            print(f"[MEMORY LIBRARIAN]: Error: {e}")
+
+def _classify_heartbeat_decision(result: dict, text: str) -> str:
+    """Prefer confirmed tool effects over model-declared intent."""
+    tool_names = {
+        item.get("tool")
+        for item in result.get("tools_used", [])
+        if item.get("success")
+    }
+    if "goal_manage" in tool_names:
+        return "advance_goal"
+    if "memory_manage" in tool_names:
+        return "remember"
+    if "diary_manage" in tool_names:
+        return "reflect"
+    if "HEARTBEAT_IDLE" in text:
+        return "idle"
+    marker = "[HEARTBEAT_DECISION:"
+    if marker in text:
+        declared = text.split(marker, 1)[1].split("]", 1)[0].strip().lower()
+        if declared in {"observe", "reflect", "remember", "advance_goal", "idle"}:
+            return declared
+    return "observe"
+
+async def heartbeat_loop():
+    """Wake Sarah only when enabled, idle, within budget, and uncancelled."""
+    while True:
+        await asyncio.sleep(30)
+        if not heartbeat_engine or not sarah_brain:
+            continue
+        heartbeat = heartbeat_engine.snapshot()
+        if not heartbeat.get("enabled") or heartbeat.get("running"):
+            continue
+        last_activity = datetime.fromisoformat(runtime_state["last_activity"])
+        idle_minutes = (datetime.now() - last_activity).total_seconds() / 60
+        if idle_minutes < heartbeat.get("min_idle_minutes", 15):
+            continue
+
+        active_goals = goal_engine.list_goals("active")[:3] if goal_engine else []
+        goal_reason = (
+            f"Review {len(active_goals)} active goal(s), prioritizing "
+            f"{active_goals[0]['title']}" if active_goals else "Review continuity state and recent progress"
+        )
+        run_id = heartbeat_engine.begin_run(reason=goal_reason)
+        if not run_id:
+            continue
+        try:
+            recent_history = heartbeat.get("history", [])[:3]
+            prompt = (
+                "[HEARTBEAT: You have been given a bounded autonomous turn. "
+                f"Wake reason: {goal_reason}. Review your self-model and active goals. "
+                "Choose at most one useful, low-risk action: add a meaningful progress note, "
+                "save a durable memory, or write a private reflection. Avoid repeating a "
+                f"recent heartbeat outcome: {json.dumps(recent_history, ensure_ascii=False)}. "
+                "Begin your response with exactly one decision tag: "
+                "[HEARTBEAT_DECISION: observe|reflect|remember|advance_goal|idle]. "
+                "If nothing needs attention, choose idle and respond briefly with HEARTBEAT_IDLE. "
+                "Do not claim to have acted unless a tool confirms it.]"
+            )
+            result = await sarah_brain.generate_response(prompt, is_proactive=True)
+            if heartbeat_engine.is_cancel_requested():
+                heartbeat_engine.finish_run(run_id, "cancelled", "Cancellation requested before delivery.", "cancelled")
+                continue
+            text = (result.get("text") or "").strip()
+            decision = _classify_heartbeat_decision(result, text)
+            if text and text != "HEARTBEAT_IDLE":
+                await broadcast_message({
+                    "action": "reply",
+                    "text": text,
+                    "thinking": result.get("thinking", ""),
+                    "actions": result.get("actions", []),
+                    "timestamp": datetime.now().isoformat(),
+                    "is_proactive": True,
+                    "source": "heartbeat",
+                })
+            heartbeat_engine.finish_run(run_id, "completed", text or "HEARTBEAT_IDLE", decision)
+        except Exception as error:
+            heartbeat_engine.finish_run(run_id, "error", str(error), "error")
+            print(f"[HEARTBEAT]: Error: {error}")
+
 # ========== STATIC FILES ==========
 static_path = Path(__file__).parent / "static"
 images_path = Path(__file__).parent / "images"
@@ -2752,6 +3077,8 @@ if __name__ == "__main__":
     # Start proactive chat in background
     loop = asyncio.get_event_loop()
     loop.create_task(proactive_chat_loop())
+    loop.create_task(memory_librarian_loop())
+    loop.create_task(heartbeat_loop())
     # Start pet monitor task
     loop.create_task(pet_monitor())
     

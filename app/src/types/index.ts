@@ -109,6 +109,13 @@ export interface PetState {
   recent_messages: { text: string; time: string }[];
 }
 
+export interface VisionObservation {
+  id?: number;
+  timestamp: string;
+  source: string;
+  description: string;
+}
+
 export interface EditorDocument {
   id: string;
   title: string;
@@ -152,6 +159,7 @@ export interface AppState {
   webcamVisionEnabled: boolean;
   webcamVisionDescription: string;
   webcamVisionTimestamp: string;
+  visionObservations: VisionObservation[];
   thinkingMode: boolean;
   proactiveMode: boolean;
   rpMode: boolean;
