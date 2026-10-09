@@ -1198,11 +1198,11 @@ def handle_body_interaction(body_part: str, intensity: float = 1.0):
         
         # If AI brain is available, notify it
         if sarah_brain and memory_engine:
-            memory_engine.add_conversation({
-                "role": "system",
-                "content": f"User touched your {body_part}",
-                "context": "vrm_interaction"
-            })
+            memory_engine.add_conversation(
+                "system",
+                f"User touched your {body_part}",
+                {"context": "vrm_interaction"},
+            )
         
         return {
             "success": True,
@@ -2382,7 +2382,7 @@ async def stop_webcam_vision_monitor():
 
 async def handle_chat_message(ws: WebSocket, data: dict):
     """Process a text chat message."""
-    user_text = data.get("content", "")
+    user_text = data.get("content") or data.get("text", "")
     tts_enabled = data.get("tts_enabled", True)
     use_vision = data.get("use_vision", False)
     
@@ -2409,6 +2409,11 @@ async def handle_chat_message(ws: WebSocket, data: dict):
             images.append(screen_b64)
             runtime_state["screen_capture_count"] += 1
     
+    if not sarah_brain:
+        if ws:
+            await ws.send_json({"action": "system", "text": "Sarah's brain is not initialized."})
+        return
+
     # Generate response
     result = await sarah_brain.generate_response(
         user_text,
@@ -2783,8 +2788,8 @@ async def handle_image_action(ws: WebSocket, data: dict):
             await ws.send_json({"action": "image_update", "result": result})
 
 # ========== PROACTIVE CHAT TASK ==========
-async def proactive_chat_loop():
-    """Background task for proactive chatting."""
+async def legacy_idle_proactive_loop():
+    """Legacy idle-chat loop retained for reference; not scheduled at startup."""
     while True:
         await asyncio.sleep(30)  # Check every 30 seconds
         
@@ -2951,6 +2956,37 @@ async def proactive_chat_loop():
         except Exception as e:
             print(f"[PROACTIVE LOOP]: Error: {e}")
             await asyncio.sleep(60)  # Wait a minute before retrying
+
+async def pet_monitor():
+    """Monitor pet needs and send rate-limited care suggestions."""
+    while True:
+        await asyncio.sleep(20)
+        if not runtime_state.get("proactive_mode", True) or not plugin_manager or not sarah_brain:
+            continue
+        plugin = plugin_manager.get_plugin("tamagotchi_v2") or plugin_manager.get_plugin("tamagotchi_pet")
+        if not plugin:
+            continue
+        try:
+            state = plugin.get_state()
+            needs = state.get("needs", {}) if isinstance(state, dict) and "needs" in state else state
+            hungry = needs.get("hunger", 100) < 35
+            sick = needs.get("health", 100) < 50
+            lonely = needs.get("happiness", 100) < 40
+            last_notify = runtime_state.get("last_pet_notify")
+            elapsed = (datetime.now() - datetime.fromisoformat(last_notify)).total_seconds() if last_notify else 999
+            if elapsed <= 90 or not (hungry or sick or lonely):
+                continue
+            context = plugin.get_llm_context() if hasattr(plugin, "get_llm_context") else str(state)
+            prompt = (
+                "[SYSTEM: The pet needs attention]\n"
+                "Provide 2-3 prioritized care suggestions with short reasons. "
+                "Include VRM tags only when useful.\n\n" + context
+            )
+            response = await sarah_brain.generate_response(prompt, is_proactive=True)
+            await broadcast_message({"action": "reply", "text": response.get("text", ""), "actions": response.get("actions", [])})
+            runtime_state["last_pet_notify"] = datetime.now().isoformat()
+        except Exception as error:
+            print(f"[PET MONITOR]: Error: {error}")
 
 async def memory_librarian_loop():
     """Run Sarah's reversible memory maintenance pass once each night."""
