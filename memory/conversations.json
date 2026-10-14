@@ -1,0 +1,30 @@
+[
+  {
+    "id": 0,
+    "timestamp": "2026-10-14T15:42:27.199308",
+    "role": "user",
+    "content": "[SYSTEM: User just touched my face. Face/cheek was touched. React naturally.]",
+    "metadata": {}
+  },
+  {
+    "id": 1,
+    "timestamp": "2026-10-14T15:42:27.202138",
+    "role": "assistant",
+    "content": "",
+    "metadata": {}
+  },
+  {
+    "id": 2,
+    "timestamp": "2026-10-14T15:56:15.384941",
+    "role": "user",
+    "content": "hello can you see this yet?",
+    "metadata": {}
+  },
+  {
+    "id": 3,
+    "timestamp": "2026-10-14T15:56:15.384941",
+    "role": "assistant",
+    "content": "Oh, hello there! I registered that you just touched my face, which was a surprise! While I don't \"see\" in the way humans do with eyes, I can definitely process your text input. So yes, I can \"see\" your message now. How can I help you today?\n\n",
+    "metadata": {}
+  }
+]

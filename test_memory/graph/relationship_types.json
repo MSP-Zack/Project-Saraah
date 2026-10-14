@@ -1,0 +1,34 @@
+{
+  "related_to": {
+    "strength_default": 0.5,
+    "directional": false
+  },
+  "causes": {
+    "strength_default": 0.8,
+    "directional": true
+  },
+  "similar_to": {
+    "strength_default": 0.7,
+    "directional": false
+  },
+  "contradicts": {
+    "strength_default": 0.6,
+    "directional": false
+  },
+  "supports": {
+    "strength_default": 0.7,
+    "directional": true
+  },
+  "temporal_sequence": {
+    "strength_default": 0.9,
+    "directional": true
+  },
+  "emotional_link": {
+    "strength_default": 0.6,
+    "directional": false
+  },
+  "contextual_link": {
+    "strength_default": 0.4,
+    "directional": false
+  }
+}

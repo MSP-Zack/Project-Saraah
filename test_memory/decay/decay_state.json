@@ -1,0 +1,37 @@
+{
+  "decay_models": {
+    "working_memory": {
+      "model": "exponential",
+      "half_life_hours": 0.5,
+      "min_importance": 0.1,
+      "access_protection_factor": 0.8
+    },
+    "episodic_memory": {
+      "model": "power_law",
+      "decay_rate": 0.02,
+      "min_importance": 0.2,
+      "access_protection_factor": 0.9
+    },
+    "semantic_memory": {
+      "model": "logarithmic",
+      "decay_rate": 0.005,
+      "min_importance": 0.3,
+      "access_protection_factor": 0.95
+    },
+    "procedural_memory": {
+      "model": "negative_decay",
+      "improvement_rate": 0.001,
+      "max_proficiency": 1.0,
+      "min_proficiency": 0.1
+    }
+  },
+  "cleanup_thresholds": {
+    "working_memory": 0.1,
+    "episodic_memory": 0.15,
+    "semantic_memory": 0.25,
+    "procedural_memory": 0.05
+  },
+  "decay_history": [],
+  "memory_lifetimes": {},
+  "decay_rates": {}
+}

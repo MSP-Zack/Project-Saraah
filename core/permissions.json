@@ -1,0 +1,80 @@
+{
+    "mouse_control": {
+        "enabled": true,
+        "description": "Move and click the mouse cursor",
+        "risk": "medium",
+        "icon": "mouse"
+    },
+    "keyboard_control": {
+        "enabled": true,
+        "description": "Type text and press keyboard keys",
+        "risk": "medium",
+        "icon": "keyboard"
+    },
+    "file_operations": {
+        "enabled": false,
+        "description": "Create, edit, delete files and folders",
+        "risk": "high",
+        "icon": "file"
+    },
+    "browser_control": {
+        "enabled": true,
+        "description": "Open and interact with web browser",
+        "risk": "medium",
+        "icon": "browser"
+    },
+    "app_control": {
+        "enabled": true,
+        "description": "Open and interact with applications (PyCharm, etc.)",
+        "risk": "high",
+        "icon": "app"
+    },
+    "screen_vision": {
+        "enabled": true,
+        "description": "Capture and view the screen for LLM analysis",
+        "risk": "low",
+        "icon": "screen"
+    },
+    "webcam_vision": {
+        "enabled": true,
+        "description": "Access webcam to see the user",
+        "risk": "low",
+        "icon": "camera"
+    },
+    "proactive_chat": {
+        "enabled": true,
+        "description": "Sarah can initiate conversation without user input",
+        "risk": "low",
+        "icon": "chat"
+    },
+    "vrm_actions": {
+        "enabled": true,
+        "description": "Control VRM model animations and expressions",
+        "risk": "low",
+        "icon": "user"
+    },
+    "system_shell": {
+        "enabled": false,
+        "description": "Execute shell commands (limited, no admin)",
+        "risk": "critical",
+        "icon": "terminal"
+    },
+    "memory_edit": {
+        "enabled": true,
+        "description": "Sarah can modify her own memory entries",
+        "risk": "medium",
+        "icon": "brain"
+    },
+    "diary_access": {
+        "enabled": true,
+        "description": "Sarah can read and write her private diary file",
+        "risk": "medium",
+        "icon": "notebook"
+    },
+    "image_generation": {
+        "enabled": true,
+        "description": "Sarah can generate or fetch images using the internet and browser tools",
+        "risk": "medium",
+        "icon": "image"
+    }
+}

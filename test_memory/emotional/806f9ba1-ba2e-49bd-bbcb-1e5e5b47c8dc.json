@@ -1,0 +1,26 @@
+{
+  "memory_id": "806f9ba1-ba2e-49bd-bbcb-1e5e5b47c8dc",
+  "content": {
+    "emotional_state": {
+      "user_joy": 0.8,
+      "ai_joy": 0.9,
+      "context": "sharing interests"
+    },
+    "relationship_impact": 0.1
+  },
+  "content_type": "structured",
+  "metadata": {
+    "importance": 0.5,
+    "source": "interaction",
+    "context": {},
+    "emotional_context": {
+      "joy": 0.85,
+      "connection": 0.7
+    },
+    "tags": [
+      "emotion",
+      "positive"
+    ],
+    "timestamp": "2026-05-06T19:42:16.886112"
+  }
+}

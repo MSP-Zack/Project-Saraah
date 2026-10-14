@@ -1,0 +1,30 @@
+{
+  "name": "PixelV2",
+  "species": "fox",
+  "stage": "baby",
+  "age_days": 0,
+  "birth_date": "2026-10-14T14:14:17.895179",
+  "last_checked": "2026-10-14T14:20:58.489818",
+  "needs": {
+    "hunger": 79.599408341,
+    "energy": 79.73293889399999,
+    "happiness": 79.79970417049998,
+    "hygiene": 79.86646944699999,
+    "health": 100.0
+  },
+  "personality": {
+    "playful": 50,
+    "shy": 30,
+    "curious": 60
+  },
+  "status": {
+    "is_sleeping": false,
+    "is_sick": false,
+    "mood": "happy"
+  },
+  "counters": {
+    "interactions_count": 0,
+    "meals_fed": 0,
+    "games_played": 0
+  }
+}

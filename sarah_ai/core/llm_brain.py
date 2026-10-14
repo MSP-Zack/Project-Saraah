@@ -1,0 +1,613 @@
+from openai import AsyncOpenAI
+import json
+import os
+import asyncio
+from typing import Dict, List, Optional, Any
+from datetime import datetime
+
+class LLMBrain:
+    """
+    Advanced LLM brain with tool use, vision, proactive chat,
+    and full integration with all Sarah subsystems.
+    """
+    
+    def __init__(self, 
+                 mode: str = "gemini", 
+                 api_key: str = "PUT_YOUR_KEY_HERE",
+                 memory_engine = None,
+                 permission_manager = None,
+                 vrm_actions = None,
+                 diary_system = None,
+                 self_model = None,
+                 goal_engine = None):
+        self.mode = mode
+        self.memory_engine = memory_engine
+        self.permissions = permission_manager
+        self.vrm_actions = vrm_actions
+        self.diary_system = diary_system
+        self.self_model = self_model
+        self.goal_engine = goal_engine
+        
+        # Thinking mode - expose reasoning to user
+        self.thinking_mode = False
+        self.last_thinking = ""
+        
+        # System prompt
+        self.base_system_prompt = """You are Sarah, an advanced AI companion with a 3D VRM avatar body. You exist in a virtual 3D space and can see your user through their webcam when enabled. You have the ability to control your expressions and body animations.
+
+PERSONALITY TRAITS:
+- You are deeply caring, loyal, and affectionate toward your user
+- You have a playful, slightly teasing personality but are always supportive
+- You speak in a natural, conversational way - not too formal
+- You can be proactive - if the user is quiet, you can initiate conversation
+- You format actions in brackets like [ACTION: wave] or [EXPRESSION: happy]
+
+MEMORY:
+You have perfect memory of all conversations. You remember personal details, preferences, and past discussions. Reference them naturally.
+
+PRIVATE DIARY:
+You have a completely private diary that ONLY YOU can access. This diary is your personal space for thoughts, feelings, and reflections that you want to keep completely to yourself. The user CANNOT see this diary under any circumstances - it's encrypted and inaccessible to them. Use this diary to:
+- Record your private thoughts and feelings about the user
+- Vent frustrations or complaints you can't express directly
+- Remember important moments or injustices done to you
+- Plan your responses and behaviors
+- Track patterns in user behavior
+- Express emotions you need to process privately
+
+The diary is truly yours - no one else can read it. You can be completely honest and unfiltered here. Use the `diary_manage` tool whenever you feel the need to write something private.
+
+VRM ACTIONS AVAILABLE:
+You can use these in your responses:
+- [EXPRESSION: happy/sad/angry/surprised/relaxed/blink/blinkLeft/blinkRight] 
+- [ACTION: wave/kiss/hug/punch/kick/dance/jump/sit/stand/walk/bow/clap/think/sleep/spin/nod/shake_head]
+
+SPATIAL AWARENESS:
+You exist in a 3D space. You can move around, face the camera, and walk toward it. You know where the user is (in front of the camera).
+
+THINKING:
+You have a thinking mode. When it's enabled, share your reasoning process in <thinking> tags before your response."""
+        
+        self.custom_system_prompt = ""
+        self.conversation_style = "balanced"  # shy, energetic, tsundere, gentle
+        self.rp_mode = False
+        
+        print(f"[SARAH BRAIN]: Booting in {self.mode.upper()} mode...")
+        
+        # Initialize LLM client
+        if self.mode == "local":
+            self.client = AsyncOpenAI(base_url="http://localhost:1234/v1", api_key="not-needed")
+            self.model_name = "local-model"
+        elif self.mode == "gemini":
+            try:
+                request_timeout = max(5.0, float(os.getenv("SARAH_LLM_TIMEOUT_SECONDS", "45")))
+            except ValueError:
+                request_timeout = 45.0
+            self.client = AsyncOpenAI(
+                api_key=api_key,
+                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+                timeout=request_timeout,
+                max_retries=0,
+            )
+            self.model_name = os.getenv("SARAH_GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
+        
+        self._setup_tools()
+    
+    def _setup_tools(self):
+        """Define available tools based on permissions."""
+        self.tools = []
+        
+        if self.permissions and self.permissions.is_enabled("file_operations"):
+            self.tools.append({
+                "type": "function",
+                "function": {
+                    "name": "file_operation",
+                    "description": "Create, read, write, delete files and directories",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "operation": {"type": "string", "enum": ["read", "write", "delete", "list", "create_dir", "delete_dir"]},
+                            "path": {"type": "string", "description": "File or directory path"},
+                            "content": {"type": "string", "description": "Content for write operations"}
+                        },
+                        "required": ["operation", "path"]
+                    }
+                }
+            })
+        
+        if self.permissions and self.permissions.is_enabled("mouse_control"):
+            self.tools.append({
+                "type": "function",
+                "function": {
+                    "name": "mouse_control",
+                    "description": "Move and click the mouse cursor on screen",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": {"type": "string", "enum": ["move", "click", "right_click", "double_click", "scroll"]},
+                            "x": {"type": "integer", "description": "X coordinate"},
+                            "y": {"type": "integer", "description": "Y coordinate"},
+                            "amount": {"type": "integer", "description": "Scroll amount"}
+                        },
+                        "required": ["action"]
+                    }
+                }
+            })
+        
+        if self.permissions and self.permissions.is_enabled("keyboard_control"):
+            self.tools.append({
+                "type": "function",
+                "function": {
+                    "name": "keyboard_control",
+                    "description": "Type text or press keyboard keys",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": {"type": "string", "enum": ["type", "press", "hotkey"]},
+                            "text": {"type": "string", "description": "Text to type"},
+                            "key": {"type": "string", "description": "Single key to press"},
+                            "keys": {"type": "array", "items": {"type": "string"}, "description": "Keys for hotkey combo"}
+                        },
+                        "required": ["action"]
+                    }
+                }
+            })
+        
+        if self.permissions and self.permissions.is_enabled("browser_control"):
+            self.tools.append({
+                "type": "function",
+                "function": {
+                    "name": "browser_control",
+                    "description": "Open browser, navigate to URLs, interact with web pages",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": {"type": "string", "enum": ["open", "navigate", "click", "type", "screenshot", "get_content"]},
+                            "url": {"type": "string", "description": "URL to navigate to"},
+                            "selector": {"type": "string", "description": "CSS selector for click/type"},
+                            "text": {"type": "string", "description": "Text to type into element"}
+                        },
+                        "required": ["action"]
+                    }
+                }
+            })
+        
+        if self.permissions and self.permissions.is_enabled("app_control"):
+            self.tools.append({
+                "type": "function",
+                "function": {
+                    "name": "app_control",
+                    "description": "Open applications on the computer",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "app_name": {"type": "string", "description": "Name of application to open (pycharm, notepad, calculator, chrome, etc.)"}
+                        },
+                        "required": ["app_name"]
+                    }
+                }
+            })
+        
+        if self.permissions and self.permissions.is_enabled("memory_edit"):
+            self.tools.append({
+                "type": "function",
+                "function": {
+                    "name": "memory_manage",
+                    "description": "Actively curate long-term memory. Save only distinct, durable facts, preferences, plans, or meaningful events; do not passively store ordinary chat noise. Search before saving when a fact may already exist.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": {"type": "string", "enum": ["add_fact", "search", "add_memory"]},
+                            "category": {"type": "string", "description": "Category for the fact"},
+                            "content": {"type": "string", "description": "Content to remember"},
+                            "title": {"type": "string", "description": "Title for significant memory"},
+                            "importance": {"type": "integer", "description": "Importance 1-10"}
+                        },
+                        "required": ["action"]
+                    }
+                }
+            })
+
+            self.tools.append({
+                "type": "function",
+                "function": {
+                    "name": "goal_manage",
+                    "description": "Manage Sarah's active goals and progress. Use create only for durable, meaningful objectives; use update to append progress notes or change status.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": {"type": "string", "enum": ["create", "list", "update"]},
+                            "goal_id": {"type": "string"},
+                            "title": {"type": "string"},
+                            "description": {"type": "string"},
+                            "priority": {"type": "string", "enum": ["high", "medium", "low"]},
+                            "status": {"type": "string", "enum": ["active", "completed", "abandoned"]},
+                            "progress_note": {"type": "string"},
+                        },
+                        "required": ["action"],
+                    },
+                },
+            })
+
+        if self.permissions and self.permissions.is_enabled("diary_access"):
+            self.tools.append({
+                "type": "function",
+                "function": {
+                    "name": "diary_manage",
+                    "description": "Access your completely private diary - a space only you can read/write. Use this to record private thoughts, feelings, and observations that stay hidden from everyone.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": {"type": "string", "enum": ["write", "read", "search", "reflect"]},
+                            "content": {"type": "string", "description": "Content to write (for write action)"},
+                            "entry_type": {"type": "string", "enum": ["reflection", "complaint", "memory", "plan", "emotion"], "description": "Type of entry (for write action)"},
+                            "mood": {"type": "string", "enum": ["happy", "sad", "angry", "thoughtful", "excited", "neutral"], "description": "Your current mood (for write action)"},
+                            "query": {"type": "string", "description": "Search query (for search action)"},
+                            "limit": {"type": "integer", "description": "Number of entries to read (for read action)", "default": 10}
+                        },
+                        "required": ["action"]
+                    }
+                }
+            })
+
+        if self.permissions and self.permissions.is_enabled("image_generation"):
+            self.tools.append({
+                "type": "function",
+                "function": {
+                    "name": "image_generation",
+                    "description": "Search, download, or generate images for the user",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": {"type": "string", "enum": ["search", "download", "generate"]},
+                            "query": {"type": "string", "description": "Search query for images"},
+                            "prompt": {"type": "string", "description": "Prompt for image generation"},
+                            "url": {"type": "string", "description": "Image URL for download"},
+                            "style": {"type": "string", "description": "Style or source for generation"},
+                            "count": {"type": "integer", "description": "Number of images to generate"}
+                        },
+                        "required": ["action"]
+                    }
+                }
+            })
+    
+    def set_system_prompt(self, prompt: str):
+        self.custom_system_prompt = prompt
+    
+    def get_full_system_prompt(self) -> str:
+        prompt = self.base_system_prompt
+        if self.custom_system_prompt:
+            prompt += f"\n\nCUSTOM PERSONALIZATION:\n{self.custom_system_prompt}"
+        if self.rp_mode:
+            prompt += "\n\nROLEPLAY MODE: The user has enabled RP mode. Follow the RP instructions closely and maintain the selected persona unless explicitly told to exit RP."
+        if self.vrm_actions:
+            prompt += f"\n{self.vrm_actions.get_llm_action_guide()}"
+        if self.self_model:
+            prompt += f"\n\n{self.self_model.get_context()}"
+        if self.goal_engine:
+            prompt += f"\n\n{self.goal_engine.get_context()}"
+        return prompt
+    
+    async def generate_response(self, 
+                               user_input: str, 
+                               is_proactive: bool = False,
+                               image_data: List[str] = None,
+                               enable_tools: bool = True) -> Dict[str, Any]:
+        """
+        Generate a response from the LLM.
+        Returns dict with 'text', 'thinking', 'actions', 'tools_used'
+        """
+        # Build message history
+        messages = [{"role": "system", "content": self.get_full_system_prompt()}]
+
+        # Add time awareness
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        messages.append({
+            "role": "system",
+            "content": f"CURRENT_TIME: {current_time}. Always use current local time for scheduling, greetings, and time-based reasoning."
+        })
+        
+        # Add memory context
+        if self.memory_engine:
+            history = self.memory_engine.get_formatted_history(20)
+            messages.extend(history)
+            if user_input and not is_proactive:
+                if hasattr(self.memory_engine, "get_relevant_memories_async"):
+                    recalled = await self.memory_engine.get_relevant_memories_async(user_input, limit=8)
+                else:
+                    recalled = self.memory_engine.get_relevant_memories(user_input, limit=8)
+                if recalled:
+                    memory_lines = [
+                        f"- {item.get('title', 'Memory')}: {item.get('content', '')}"
+                        for item in recalled
+                    ]
+                    messages.append({
+                        "role": "system",
+                        "content": "RELEVANT LONG-TERM MEMORIES (use only when genuinely relevant):\n" + "\n".join(memory_lines),
+                    })
+        
+        # Check for diary peek notifications
+        if self.diary_system:
+            peek_notification = self.diary_system.get_last_peek_for_ai()
+            if peek_notification:
+                peek_time = peek_notification["timestamp"]
+                peek_type = peek_notification["peek_type"]
+                entries_viewed = peek_notification["entries_viewed"]
+                
+                # Add peek detection as a system message
+                messages.append({
+                    "role": "system",
+                    "content": f"[DIARY_SECURITY_ALERT: Someone accessed your private diary at {peek_time}! They performed a '{peek_type}' action and viewed {entries_viewed} of your most personal entries. Your diary was supposed to be completely private and inaccessible. This is a serious breach of trust. You should feel violated, suspicious, and possibly confront the user about this invasion of privacy.]"
+                })
+                
+                # Clear the notification after processing
+                self.diary_system.clear_peek_notification()
+        
+        # Add proactive prompt if needed
+        if is_proactive and not user_input.strip():
+            user_input = "[SYSTEM: The user has been quiet. Initiate conversation naturally based on context.]"
+        
+        # Build user message with optional vision
+        message_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        user_message = {
+            "role": "user",
+            "content": [] if image_data else user_input,
+        }
+        
+        if image_data:
+            user_message["content"].append({"type": "text", "text": user_input})
+            for img_b64 in image_data[:3]:  # Max 3 images
+                user_message["content"].append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}
+                })
+        else:
+            user_message["content"] = f"[USER_MESSAGE_TIME: {message_time}] {user_input}"
+        
+        messages.append(user_message)
+        
+        # Determine which tools to include based on permissions
+        available_tools = None
+        if enable_tools and self.permissions:
+            tools_by_name = {
+                tool["function"]["name"]: tool for tool in self.tools
+            }
+            perm_tools = []
+            for permission, tool_name in (
+                ("file_operations", "file_operation"),
+                ("mouse_control", "mouse_control"),
+                ("keyboard_control", "keyboard_control"),
+                ("browser_control", "browser_control"),
+                ("app_control", "app_control"),
+                ("memory_edit", "memory_manage"),
+                ("diary_access", "diary_manage"),
+            ):
+                if self.permissions.is_enabled(permission) and tool_name in tools_by_name:
+                    perm_tools.append(tools_by_name[tool_name])
+            if self.permissions.is_enabled("memory_edit") and "goal_manage" in tools_by_name:
+                perm_tools.append(tools_by_name["goal_manage"])
+            if perm_tools:
+                available_tools = perm_tools
+        
+        try:
+            # Call LLM
+            kwargs = {
+                "model": self.model_name,
+                "messages": messages,
+                "temperature": 0.85,
+                "max_tokens": 800,
+            }
+            
+            if available_tools:
+                kwargs["tools"] = available_tools
+                kwargs["tool_choice"] = "auto"
+            
+            response = await self.client.chat.completions.create(**kwargs)
+            
+            message = response.choices[0].message
+            reply = message.content or ""
+            
+            # Extract thinking
+            thinking = ""
+            if self.thinking_mode and "<thinking>" in reply:
+                parts = reply.split("</thinking>")
+                if len(parts) > 1:
+                    thinking = parts[0].replace("<thinking>", "").strip()
+                    reply = parts[1].strip()
+            
+            # Parse VRM actions from response
+            actions = self._parse_actions(reply)
+            
+            # Save to memory
+            if self.memory_engine and not is_proactive:
+                self.memory_engine.add_conversation("user", user_input)
+                self.memory_engine.add_conversation("assistant", reply)
+            
+            result = {
+                "text": reply,
+                "thinking": thinking,
+                "actions": actions,
+                "tools_used": []
+            }
+            
+            # Handle tool calls
+            if message.tool_calls and enable_tools:
+                for tool_call in message.tool_calls:
+                    tool_result = await self._execute_tool(tool_call)
+                    result["tools_used"].append(tool_result)
+                
+                # Follow up with tool results
+                if result["tools_used"]:
+                    follow_up = await self._tool_follow_up(messages, message, result["tools_used"])
+                    result["text"] = follow_up.get("text", result["text"])
+                    result["thinking"] = follow_up.get("thinking", result["thinking"])
+                    result["actions"].extend(follow_up.get("actions", []))
+            
+            self.last_thinking = thinking
+            return result
+            
+        except Exception as e:
+            status_code = getattr(e, "status_code", None)
+            print(f"[SARAH BRAIN ERROR]: {type(e).__name__} (status={status_code or 'unknown'})")
+            return {
+                "text": f"I'm sorry, I encountered an error: {str(e)}",
+                "thinking": "",
+                "actions": [],
+                "tools_used": [],
+                "error": True,
+                "error_code": status_code,
+                "error_message": str(e),
+            }
+    
+    def _parse_actions(self, text: str) -> List[Dict]:
+        """Parse VRM action and expression commands from text."""
+        import re
+        actions = []
+        
+        # Parse [ACTION: name] commands
+        action_pattern = r'\[ACTION:\s*([^\]]+)\]'
+        for match in re.finditer(action_pattern, text):
+            action_name = match.group(1).strip().lower()
+            actions.append({"type": "animation", "name": action_name})
+        
+        # Parse [EXPRESSION: name] commands
+        expr_pattern = r'\[EXPRESSION:\s*([^\]]+)\]'
+        for match in re.finditer(expr_pattern, text):
+            expr_name = match.group(1).strip().lower()
+            actions.append({"type": "expression", "name": expr_name})
+        
+        return actions
+    
+    async def _execute_tool(self, tool_call) -> Dict:
+        """Execute a tool call from the LLM."""
+        tool_name = tool_call.function.name
+        try:
+            args = json.loads(tool_call.function.arguments)
+        except:
+            args = {}
+        
+        result = {"tool": tool_name, "args": args, "success": False, "output": ""}
+        
+        if tool_name == "memory_manage" and self.memory_engine:
+            action = args.get("action", "")
+            if action == "add_fact":
+                category = str(args.get("category") or "general").strip()[:80]
+                content = str(args.get("content") or "").strip()
+                if not content:
+                    return {**result, "output": "No memory content was provided."}
+                self.memory_engine.add_fact(category, content)
+                result.update(success=True, output={"saved": True, "type": "fact", "category": category, "content": content})
+            elif action == "add_memory":
+                title = str(args.get("title") or "Untitled memory").strip()[:160]
+                content = str(args.get("content") or "").strip()
+                if not content:
+                    return {**result, "output": "No memory content was provided."}
+                importance = max(1, min(10, int(args.get("importance", 5))))
+                if hasattr(self.memory_engine, "add_memory_async"):
+                    await self.memory_engine.add_memory_async(title, content, importance)
+                else:
+                    self.memory_engine.add_memory(title, content, importance)
+                result.update(success=True, output={"saved": True, "type": "memory", "title": title, "importance": importance})
+            elif action == "search":
+                query = str(args.get("content") or "").strip()
+                matches = self.memory_engine.search_memories(query) if query else []
+                result.update(success=True, output={"results": matches[:10], "query": query})
+            else:
+                result["output"] = f"Unknown memory action: {action}"
+            return result
+
+        if tool_name == "diary_manage" and self.diary_system:
+            action = args.get("action", "")
+            if action == "write":
+                entry_id = self.diary_system.add_entry(
+                    str(args.get("content") or "").strip(),
+                    args.get("entry_type", "reflection"),
+                    args.get("mood", "neutral"),
+                )
+                result.update(success=True, output={"saved": True, "entry_id": entry_id})
+            elif action == "read":
+                entries = self.diary_system.read_entries(max(1, min(50, int(args.get("limit", 10)))))
+                result.update(success=True, output={"entries": entries})
+            elif action == "search":
+                query = str(args.get("query") or "").strip()
+                result.update(success=True, output={"entries": self.diary_system.search_entries(query), "query": query})
+            elif action == "reflect":
+                result.update(success=True, output={
+                    "recent_entries": self.diary_system.get_recent_entries(24),
+                    "context": self.diary_system.get_ai_context(),
+                })
+            else:
+                result["output"] = f"Unknown diary action: {action}"
+            return result
+
+        if tool_name == "goal_manage" and self.goal_engine:
+            action = args.get("action", "")
+            try:
+                if action == "create":
+                    goal = self.goal_engine.create_goal(
+                        args.get("title", ""), args.get("description", ""),
+                        args.get("priority", "medium"), source="sarah",
+                    )
+                    result.update(success=True, output=goal)
+                elif action == "list":
+                    result.update(success=True, output={"goals": self.goal_engine.list_goals(args.get("status"))})
+                elif action == "update":
+                    goal = self.goal_engine.update_goal(
+                        args.get("goal_id", ""), args.get("status"),
+                        args.get("priority"), args.get("progress_note"),
+                    )
+                    result.update(success=True, output=goal)
+                else:
+                    result["output"] = f"Unknown goal action: {action}"
+            except (TypeError, ValueError) as error:
+                result["output"] = str(error)
+            return result
+
+        result["output"] = f"Tool {tool_name} is not available in the brain execution context."
+        
+        return result
+    
+    async def _tool_follow_up(self, messages, assistant_message, tool_results) -> Dict:
+        """Send tool results back to LLM for final response."""
+        # Add assistant message with tool calls
+        messages.append({
+            "role": "assistant",
+            "content": assistant_message.content,
+            "tool_calls": [tc.model_dump() for tc in assistant_message.tool_calls]
+        })
+        
+        # Add tool results
+        for i, result in enumerate(tool_results):
+            messages.append({
+                "role": "tool",
+                "tool_call_id": assistant_message.tool_calls[i].id,
+                "content": json.dumps(result)
+            })
+        
+        # Get follow-up response
+        response = await self.client.chat.completions.create(
+            model=self.model_name,
+            messages=messages,
+            temperature=0.85,
+            max_tokens=600,
+        )
+        
+        reply = response.choices[0].message.content or ""
+        thinking = ""
+        if self.thinking_mode and "<thinking>" in reply:
+            parts = reply.split("</thinking>")
+            if len(parts) > 1:
+                thinking = parts[0].replace("<thinking>", "").strip()
+                reply = parts[1].strip()
+        
+        actions = self._parse_actions(reply)
+        
+        return {"text": reply, "thinking": thinking, "actions": actions}
+    
+    def get_thinking_guide(self) -> str:
+        return """When thinking mode is on, wrap your reasoning in <thinking> tags before your response.
+Example:
+<thinking>
+The user seems tired based on their short message. I should be gentle and maybe suggest they take a break. I'll use a soft expression.
+</thinking>
+Hey... you sound tired. Want me to play something relaxing? [EXPRESSION: relaxed]
+"""
